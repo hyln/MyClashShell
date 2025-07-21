@@ -26,3 +26,17 @@
            8XS8t8
 ```                            
      
+## 常用命令
+
+```
+myclash #查看当前myclcash状态
+myclash service update_subcribe # 更新订阅
+myclash change_subscribe <订阅名>  # 手动切换订阅(不下载新文件)
+
+myclash shell on 
+myclash shell off
+
+myclash window off
+myclash window on
+
+```

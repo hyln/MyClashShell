@@ -17,7 +17,7 @@ def download_profile(profile_name:str,url:str):
     logger.info(f'{profile_name} : "{full_url}"')
 
     tmp_cfg_save_path = raw_configs_dir+f"/{profile_name}.yaml"
-    download_configs_cmd= f'unset http_proxy https_proxy;curl -o {tmp_cfg_save_path} -k  --max-time 20 "{full_url}"'
+    download_configs_cmd= f'unset http_proxy https_proxy;curl -o {tmp_cfg_save_path} -k  --max-time 20 -H "User-Agent: ClashForWindows/0.20.5" "{full_url}"'
     # -k 取消校验
     # --max-time 10 设置超时
     print(download_configs_cmd)
