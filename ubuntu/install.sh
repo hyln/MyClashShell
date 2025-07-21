@@ -94,9 +94,40 @@ install_clash(){
 
     cp ${MYCLASH_ROOT_PWD}/tmp/Country.mmdb {MYCLASH_ROOT_PWD}/clash/configs/Country.mmdb 
 
-    # 生成配置文件
-    cp ${MYCLASH_ROOT_PWD}/ubuntu/template/user_config.yaml ${MYCLASH_ROOT_PWD}/user_config.yaml
-    chmod 666 ${MYCLASH_ROOT_PWD}/user_config.yaml
+    # 读取version文件
+    if [ -f "${MYCLASH_ROOT_PWD}/ubuntu/version" ]; then
+        version=$(cat "${MYCLASH_ROOT_PWD}/ubuntu/version")
+        echo "当前版本: $version"
+    else
+        echo "未找到版本文件: ${MYCLASH_ROOT_PWD}/ubuntu/version"
+    fi
+    # 检查 user_config.yaml 是否存在
+    if [ ! -f "${MYCLASH_ROOT_PWD}/user_config.yaml" ]; then
+        echo "未找到 user_config.yaml，将重新生成。"
+        # 生成 user_config
+        ${MYCLASH_ROOT_PWD}/ubuntu/scripts/gen_placehold_fill_file.py  \
+        ${MYCLASH_ROOT_PWD}/ubuntu/template/user_config.yaml \
+        ${MYCLASH_ROOT_PWD}/user_config.yaml \
+        ${version}
+        chmod 666 ${MYCLASH_ROOT_PWD}/user_config.yaml
+    else
+        # 检查 user_config.yaml 版本是否与当前版本一致
+        config_version=""
+        if grep -q '^version:' "${MYCLASH_ROOT_PWD}/user_config.yaml"; then
+            config_version=$(grep '^version:' "${MYCLASH_ROOT_PWD}/user_config.yaml" | awk '{print $2}')
+        fi
+        if [ "$version" != "" ] && [ "$version" != "$config_version" ]; then
+            echo "user_config.yaml 版本($config_version)与当前版本($version)不一致，将重新生成。"
+            rm -f "${MYCLASH_ROOT_PWD}/user_config.yaml"
+            # 生成 user_config
+            ${MYCLASH_ROOT_PWD}/ubuntu/scripts/gen_placehold_fill_file.py  \
+            ${MYCLASH_ROOT_PWD}/ubuntu/template/user_config.yaml \
+            ${MYCLASH_ROOT_PWD}/user_config.yaml \
+            ${version}
+            chmod 666 ${MYCLASH_ROOT_PWD}/user_config.yaml
+        fi
+    fi
+
     # create empty 
     cp ${MYCLASH_ROOT_PWD}/ubuntu/template/empty.yaml ${MYCLASH_ROOT_PWD}/clash/configs/config.yaml 
     chmod 666  ${MYCLASH_ROOT_PWD}/clash/configs/config.yaml 

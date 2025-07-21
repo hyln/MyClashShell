@@ -1,3 +1,4 @@
+version: <|PLACEHOLD_1|>
 shell_proxy_default: 'ON'  ##  ON  / OFF
 subscribes:
   your_proxy_name: "<you_proxy_url>"
