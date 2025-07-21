@@ -1,6 +1,6 @@
 shell_proxy_default: 'ON'  ##  ON  / OFF
 subscribes:
-  <your_proxy_name>: "<you_proxy_url>"
+  your_proxy_name: "<you_proxy_url>"
 # 默认使用订阅，你可以填subscribe_urls中的任意名字,DEFAULT 是指使用 subscribe_urls 中的第一个
 default_subscribe: "DEFAULT"
 

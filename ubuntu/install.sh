@@ -4,6 +4,12 @@ download_dashboard(){
     mkdir -p "${MYCLASH_ROOT_PWD}/tmp"
     chmod -R 777 "${MYCLASH_ROOT_PWD}/tmp"
     
+    echo "===下载网页界面==="
+    # 检查是否已经下载过
+    if [ -f "${MYCLASH_ROOT_PWD}/tmp/Razord-meta-gh-pages.zip" ] && [ -f "${MYCLASH_ROOT_PWD}/tmp/yacd-gh-pages.zip" ]; then
+        echo "网页界面已存在，跳过下载"
+        return
+    fi
     # 下载webpage
     base_url=https://gitee.com/wangdaochuan/resource_backup/releases/download/webpage
     download_dep $base_url/Razord-meta-gh-pages.zip ${MYCLASH_ROOT_PWD}/tmp/Razord-meta-gh-pages.zip
@@ -40,24 +46,36 @@ download_clash(){
     print_err_and_exit_if_failed "pyyaml | colorlog 安装失败,请检查网络连接"
 
     echo "===下载程序==="
-    arch=$(uname -m)
-    if [ $arch = x86_64 ]; then
-        clash_arch=clash-linux-amd64-v3-v1.11.4.gz
-    elif [ $arch = aarch64 ]; then
-        clash_arch=clash-linux-armv8-v1.11.8.gz
-    # elif [ $arch = armv7a ]; then
-    #     clash_arch=clash-linux-armv7-v1.12.0.gz
+    if [ -f "${MYCLASH_ROOT_PWD}/tmp/clash.gz" ]; then
+        echo "clash.gz 已存在，跳过下载"
+
+        print_err_and_exit_if_failed "Clash Core 下载失败"
     else
-        failed_and_exit "Arch $arch is not supported"
+        echo "clash.gz 不存在，准备下载"
+        arch=$(uname -m)
+        if [ $arch = x86_64 ]; then
+            clash_arch=clash-linux-amd64-v3-v1.11.4.gz
+        elif [ $arch = aarch64 ]; then
+            clash_arch=clash-linux-armv8-v1.11.8.gz
+        # elif [ $arch = armv7a ]; then
+        #     clash_arch=clash-linux-armv7-v1.12.0.gz
+        else
+            failed_and_exit "Arch $arch is not supported"
+        fi
+
+        wget ${dependenciesUrl}/$clash_arch -O ${MYCLASH_ROOT_PWD}/tmp/clash.gz
+    fi
+    
+    echo "=======下载Country.mmdb======"
+    if [ -f "${MYCLASH_ROOT_PWD}/tmp/Country.mmdb" ]; then
+        echo "Country.mmdb 已存在，跳过下载"
+
+    else
+        echo "Country.mmdb 不存在，准备下载"
+        wget ${dependenciesUrl}/Country.mmdb -O ${MYCLASH_ROOT_PWD}/tmp/Country.mmdb 
+        print_err_and_exit_if_failed "Country.mmdb 下载失败"
     fi
 
-    wget ${dependenciesUrl}/$clash_arch -O ${MYCLASH_ROOT_PWD}/tmp/clash.gz
-    print_err_and_exit_if_failed "Clash Core 下载失败"
-
-
-    echo "=======下载Country.mmdb======"
-    wget ${dependenciesUrl}/Country.mmdb -O ${MYCLASH_ROOT_PWD}/tmp/Country.mmdb 
-    print_err_and_exit_if_failed "Country.mmdb 下载失败"
 
 }
 install_clash(){
