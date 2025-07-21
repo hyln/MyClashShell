@@ -28,6 +28,18 @@ def download_profile(profile_name:str,url:str):
         logger.error(f"Download {profile_name} failed")
         print(result.stdout.strip())
         return False
+    # 检查yaml文件是否合法且包含关键字
+    try:
+        with open(tmp_cfg_save_path, "r") as f:
+            cfg_data = yaml.safe_load(f)
+        # 检查是否包含关键字（如 'proxies', 'proxy-groups', 'rules'）
+        required_keys = ['proxies', 'proxy-groups', 'rules']
+        if not any(key in cfg_data for key in required_keys):
+            logger.error(f"{profile_name} 配置文件缺少关键字段，你的订阅可能已过期或不支持 Clash,也请检查网络连接是否正常")
+            return False
+    except Exception as e:
+        logger.error(f"{profile_name} 配置文件解析失败: {e}")
+        return False
 
     #  asset config is already download
     result = subprocess.run("find "+tmp_cfg_save_path, shell=True, capture_output=True, text=True)
