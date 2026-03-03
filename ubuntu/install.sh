@@ -1,5 +1,39 @@
 #!/bin/bash
 
+
+mkvenv() {
+    # 用法: mkvenv [env_name]
+    local ENV_NAME=${1:-venv}
+    local BASE_DIR=${MYCLASH_ROOT_PWD:-$(pwd)}
+    local ENV_DIR="${BASE_DIR%/}/${ENV_NAME}"
+
+    # 检查 python3 是否存在
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "❌ python3 未安装"
+        return 1
+    fi
+
+    # 检查 venv 模块
+    if ! python3 -m venv --help >/dev/null 2>&1; then
+        echo "⚠️  正在安装 python3-venv..."
+        apt update && apt install -y python3-venv
+    fi
+
+    # 创建虚拟环境（放在 ${MYCLASH_ROOT_PWD} 下）
+    echo "📦 在 ${BASE_DIR} 创建虚拟环境: $ENV_NAME"
+    python3 -m venv "$ENV_DIR" || return 1
+
+    # 激活
+    echo "🚀 激活虚拟环境: $ENV_DIR"
+    # shellcheck source=/dev/null
+    source "${ENV_DIR}/bin/activate"
+
+    # 升级 pip
+    ${MYCLASH_ROOT_PWD}/venv/bin/pip install --upgrade pip >/dev/null 2>&1
+
+    echo "✅ 完成！当前环境: $ENV_DIR"
+}
+
 download_dashboard(){
     mkdir -p "${MYCLASH_ROOT_PWD}/tmp"
     chmod -R 777 "${MYCLASH_ROOT_PWD}/tmp"
@@ -42,7 +76,7 @@ download_clash(){
     sudo apt install -y curl vim wget python3 python3-pip
     print_err_and_exit_if_failed "apt 安装失败,请检查网络连接"
 
-    /usr/bin/python3 -m pip install pyyaml colorlog
+    ${MYCLASH_ROOT_PWD}/venv/bin/python3 -m pip install pyyaml colorlog requests
     print_err_and_exit_if_failed "pyyaml | colorlog 安装失败,请检查网络连接"
 
     echo "===下载程序==="
@@ -213,7 +247,7 @@ cat ${MYCLASH_ROOT_PWD}/tools/logo.txt
 myclashinfo_welcome
 read -n 1 -s -r -p "Press any key to continue..." key
 echo "\n\n"
-
+mkvenv
 download_clash
 download_dashboard
 if [[ "$use_cache" != "--deactivate-for-sudo" ]]; then

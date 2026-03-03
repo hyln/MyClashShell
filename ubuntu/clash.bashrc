@@ -22,7 +22,7 @@ myclash()
             curl --location 'http://127.0.0.1:9090/logs'
         elif [ $2 = "update_subcribe" ]; then
             myclash shell off
-            /usr/bin/python3 ${MYCLASH_ROOT_PWD}/ubuntu/scripts/update_proxy_config.py
+            ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/ubuntu/scripts/update_proxy_config.py
             myclash shell on
         else
             echo command $1 $2 not exist
@@ -58,10 +58,10 @@ myclash()
         fi
         ;;
     'cfg')
-        /usr/bin/python3 ${MYCLASH_ROOT_PWD}/ubuntu/scripts/myclash.py $1 $2
+        ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/ubuntu/scripts/myclash.py $1 $2
         ;;
     'change_subscribe')
-        /usr/bin/python3 ${MYCLASH_ROOT_PWD}/ubuntu/scripts/change_sub.py $2
+        ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/ubuntu/scripts/change_sub.py $2
         ;;        
     'help')
         echo "myclash [command*] [option*]"
@@ -81,7 +81,7 @@ myclash()
         echo "[command] cfg "
         ;;
     *)
-        # /usr/bin/python3 ${MYCLASH_ROOT_PWD}/tools/gui/gui.py
+        # ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/tools/gui/gui.py
         echo Myclash $(cat ${MYCLASH_ROOT_PWD}/ubuntu/version)
         bash ${MYCLASH_ROOT_PWD}/tools/test_proxy_status.sh > /dev/null
         if [ $? = 0 ] 
@@ -92,7 +92,7 @@ myclash()
             echo -n "当前状态："
             echo_R "连接失败"
         fi
-        # current_config_name=$(/usr/bin/python3 ${MYCLASH_ROOT_PWD}/tools/read_yaml.py default_subscribe)
+        # current_config_name=$(${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/tools/read_yaml.py default_subscribe)
         current_config_name=$(cat ${MYCLASH_ROOT_PWD}/tmp/current_sub.txt)
 
         echo "当前使用配置: $current_config_name"
@@ -128,7 +128,7 @@ _myclash()
 complete -F _myclash myclash
 
 # Auto start Proxy in Terminal
-shell_proxy_default=$(/usr/bin/python3 ${MYCLASH_ROOT_PWD}/tools/read_yaml.py shell_proxy_default)
+shell_proxy_default=$(${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/tools/read_yaml.py shell_proxy_default)
 if [ $shell_proxy_default = "ON" ]; then
     export http_proxy=http://127.0.0.1:7890
     export https_proxy=http://127.0.0.1:7890

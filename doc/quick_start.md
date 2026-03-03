@@ -19,6 +19,7 @@ source /etc/bash.bashrc ;source ~/.bashrc
 1. 使用 `myclash` 命令查看软件信息
 3. 通过`myclash help` 查看帮助
 
+> 首次使用更新完代理后需要使用 systemctl restart clash
 
 ## 快速开始
 
