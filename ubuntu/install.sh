@@ -76,7 +76,7 @@ download_clash(){
     sudo apt install -y curl vim wget python3 python3-pip
     print_err_and_exit_if_failed "apt 安装失败,请检查网络连接"
 
-    ${MYCLASH_ROOT_PWD}/venv/bin/python3 -m pip install pyyaml colorlog requests
+    ${MYCLASH_ROOT_PWD}/venv/bin/python3 -m pip install pyyaml colorlog requests textual
     print_err_and_exit_if_failed "pyyaml | colorlog 安装失败,请检查网络连接"
 
     echo "===下载程序==="

@@ -62,7 +62,10 @@ myclash()
         ;;
     'change_subscribe')
         ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/ubuntu/scripts/change_sub.py $2
-        ;;        
+        ;;
+    'tui')
+        ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/ubuntu/scripts/tui.py $2
+        ;;
     'help')
         echo "myclash [command*] [option*]"
         echo "Command:"
@@ -70,6 +73,7 @@ myclash()
         echo "      window [ on/off ]"
         echo "      shell [ on/off ]"
         echo "      cfg"
+        echo "      tui [proxy_group(optional)]"
         echo "======================"
         echo "Remark"
         echo "[command] service 负责管理clash服务"
@@ -79,6 +83,7 @@ myclash()
         echo "[command] window  命令管理在图形化应用(如 chrome )[on/off]代理"
         echo "[command] shell   命令管理在当前终端窗口[on/off]代理,默认值为config.yaml中的shell_proxy_default参数"
         echo "[command] cfg "
+        echo "[command] tui    终端节点面板（方向键选择，回车切换）"
         ;;
     *)
         # ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/tools/gui/gui.py
@@ -110,7 +115,7 @@ _myclash()
 
     case $cmd in
     'myclash')
-        COMPREPLY=( $(compgen -W 'service window shell help cfg change_subscribe' -- $cur) ) 
+        COMPREPLY=( $(compgen -W 'service window shell help cfg change_subscribe tui' -- $cur) )
         ;;
     'service')
         COMPREPLY=( $(compgen -W 'start stop restart status get_logs update_subcribe' -- $cur) ) 

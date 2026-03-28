@@ -39,4 +39,6 @@ myclash shell off
 myclash window off
 myclash window on
 
+myclash tui [代理组名] # 在终端打开节点面板
+
 ```
