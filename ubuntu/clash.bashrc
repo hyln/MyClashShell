@@ -5,18 +5,15 @@ myclash()
     case $1 in
     'service')
         if [ $2 = "start" ]; then
-            sudo systemctl start clash
-            sudo systemctl start clash_dashboard
+            sudo systemctl start myclash
 
         elif [ $2 = "stop" ]; then
-            sudo systemctl stop clash
-            sudo systemctl stop clash_dashboard
+            sudo systemctl stop myclash
 
         elif [ $2 = "restart" ]; then
-            sudo systemctl restart clash
-            sudo systemctl restart clash_dashboard
+            sudo systemctl restart myclash
         elif [ $2 = "status" ]; then
-            sudo systemctl status clash
+            sudo systemctl status myclash
         elif [ $2 = "get_logs" ]; then
             echo RUNNING
             curl --location 'http://127.0.0.1:9090/logs'
@@ -64,7 +61,8 @@ myclash()
         ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/ubuntu/scripts/change_sub.py $2
         ;;
     'tui')
-        ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/ubuntu/scripts/tui.py $2
+        PYTHONPATH="${MYCLASH_ROOT_PWD}" \
+            ${MYCLASH_ROOT_PWD}/venv/bin/python3 -m tui ${2:+$2}
         ;;
     'help')
         echo "myclash [command*] [option*]"
@@ -103,8 +101,8 @@ myclash()
         echo "当前使用配置: $current_config_name"
         echo "你可以通过 myclash help 查看帮助"
         echo "==================================="
-        echo "若需要使用程序控制面板，请打开网页"
-        echo "http://127.0.0.1:34507"
+        echo "终端控制面板: myclash tui"
+        echo "REST API: http://127.0.0.1:9090"
     esac
     
 }

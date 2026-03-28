@@ -5,13 +5,6 @@ subscribes:
 # 默认使用订阅，你可以填subscribe_urls中的任意名字,DEFAULT 是指使用 subscribe_urls 中的第一个
 default_subscribe: "DEFAULT"
 
-##########  dashboard setting  #############
-## you need restart service after change dashboard setting
-web_page: "yacd-gh-pages"
-## Razord-meta-gh-pages
-## yacd-gh-pages
-############################################
-
 ################### custom rule ############
 ## you need "myclash service update_cfg" after change custom rule
 port: 7890

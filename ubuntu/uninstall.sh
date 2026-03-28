@@ -5,13 +5,18 @@ if (( $EUID != 0 )); then
 fi
 
 rm -rf clash
-systemctl disable clash
-echo remove old clash.service
+systemctl stop myclash.service 2>/dev/null || true
+systemctl stop clash.service 2>/dev/null || true
+systemctl stop clash_dashboard.service 2>/dev/null || true
+systemctl disable myclash.service 2>/dev/null || true
+systemctl disable clash.service 2>/dev/null || true
+systemctl disable clash_dashboard.service 2>/dev/null || true
+
+echo remove systemd units
+rm -f /etc/systemd/system/myclash.service >> /dev/null
 rm -f /etc/systemd/system/clash.service >> /dev/null
 rm -f /etc/systemd/system/clash_dashboard.service >> /dev/null
 
-systemctl stop clash.service
-systemctl stop clash_dashboard.service
 systemctl daemon-reload >> /dev/null
 
 echo "remove config in /etc/bash.bashrc"

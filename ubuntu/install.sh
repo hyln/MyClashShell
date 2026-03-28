@@ -34,41 +34,6 @@ mkvenv() {
     echo "✅ 完成！当前环境: $ENV_DIR"
 }
 
-download_dashboard(){
-    mkdir -p "${MYCLASH_ROOT_PWD}/tmp"
-    chmod -R 777 "${MYCLASH_ROOT_PWD}/tmp"
-    
-    echo "===下载网页界面==="
-    # 检查是否已经下载过
-    if [ -f "${MYCLASH_ROOT_PWD}/tmp/Razord-meta-gh-pages.zip" ] && [ -f "${MYCLASH_ROOT_PWD}/tmp/yacd-gh-pages.zip" ]; then
-        echo "网页界面已存在，跳过下载"
-        return
-    fi
-    # 下载webpage
-    base_url=https://gitee.com/wangdaochuan/resource_backup/releases/download/webpage
-    download_dep $base_url/Razord-meta-gh-pages.zip ${MYCLASH_ROOT_PWD}/tmp/Razord-meta-gh-pages.zip
-    download_dep $base_url/yacd-gh-pages.zip ${MYCLASH_ROOT_PWD}/tmp/yacd-gh-pages.zip
-}
-install_dashboard() {
-    mkdir -p "${MYCLASH_ROOT_PWD}/clash/page"
-    chmod -R 777 "${MYCLASH_ROOT_PWD}/clash/"
-
-    unzip -o ${MYCLASH_ROOT_PWD}/tmp/Razord-meta-gh-pages.zip -d ${MYCLASH_ROOT_PWD}/clash/page/
-    unzip -o ${MYCLASH_ROOT_PWD}/tmp/yacd-gh-pages.zip -d ${MYCLASH_ROOT_PWD}/clash/page/
-
-    # 设置systemd
-    # 生成clash_dashboard.service
-    ${MYCLASH_ROOT_PWD}/ubuntu/scripts/gen_placehold_fill_file.py  \
-    ${MYCLASH_ROOT_PWD}/ubuntu/template/clash_dashboard.service \
-    ${MYCLASH_ROOT_PWD}/tmp/clash_dashboard.service \
-    ${MYCLASH_ROOT_PWD}
-    # 移动clash_dashboard.service
-    mv ${MYCLASH_ROOT_PWD}/tmp/clash_dashboard.service /etc/systemd/system/clash_dashboard.service
-    # 启动clash_dashboard.service
-    systemctl daemon-reload
-    systemctl enable clash_dashboard.service
-    systemctl start clash_dashboard.service
-}
 download_clash(){
     mkdir -p "${MYCLASH_ROOT_PWD}/tmp"
     chmod -R 777 "${MYCLASH_ROOT_PWD}/tmp"
@@ -119,14 +84,13 @@ install_clash(){
     chmod -R 777 "${MYCLASH_ROOT_PWD}/clash/"
 
     cd ${MYCLASH_ROOT_PWD}/clash
-    # install_dashboard
     # 解压 clash
     # gunzip -o ${MYCLASH_ROOT_PWD}/tmp/clash.gz -d ${MYCLASH_ROOT_PWD}/clash/
     gunzip -c ${MYCLASH_ROOT_PWD}/tmp/clash.gz > ${MYCLASH_ROOT_PWD}/clash/clash
 
     chmod +x ${MYCLASH_ROOT_PWD}/clash/clash
 
-    cp ${MYCLASH_ROOT_PWD}/tmp/Country.mmdb {MYCLASH_ROOT_PWD}/clash/configs/Country.mmdb 
+    cp ${MYCLASH_ROOT_PWD}/tmp/Country.mmdb ${MYCLASH_ROOT_PWD}/clash/configs/Country.mmdb
 
     # 读取version文件
     if [ -f "${MYCLASH_ROOT_PWD}/ubuntu/version" ]; then
@@ -178,24 +142,26 @@ install_clash(){
     sed -i "${start_line},${end_line}d" /etc/bash.bashrc
 
 
-    echo remove old clash.service
-    # remove /etc/systemd/system/clash.service
-    rm -f /etc/systemd/system/clash.service >> /dev/null
+    echo "迁移旧版 systemd 单元（若存在）"
+    systemctl stop myclash.service 2>/dev/null || true
+    systemctl stop clash.service 2>/dev/null || true
+    systemctl stop clash_dashboard.service 2>/dev/null || true
+    systemctl disable myclash.service 2>/dev/null || true
+    systemctl disable clash.service 2>/dev/null || true
+    systemctl disable clash_dashboard.service 2>/dev/null || true
+    rm -f /etc/systemd/system/clash.service
+    rm -f /etc/systemd/system/clash_dashboard.service
+    rm -f /etc/systemd/system/myclash.service
 
-
-    # 设置clash.service
-    clash_exec="${MYCLASH_ROOT_PWD}/clash/clash"
-    clash_config="${MYCLASH_ROOT_PWD}/clash/configs"
-    # 生成clash.service
+    echo "安装 myclash.service（Python 托管 Clash）"
     ${MYCLASH_ROOT_PWD}/ubuntu/scripts/gen_placehold_fill_file.py  \
-    ${MYCLASH_ROOT_PWD}/ubuntu/template/clash.service \
-    ${MYCLASH_ROOT_PWD}/tmp/clash.service \
-    ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD}
-    mv ${MYCLASH_ROOT_PWD}/tmp/clash.service /etc/systemd/system/clash.service
-    # 启动clash.service
+    ${MYCLASH_ROOT_PWD}/ubuntu/template/myclash.service \
+    ${MYCLASH_ROOT_PWD}/tmp/myclash.service \
+    ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD}
+    mv ${MYCLASH_ROOT_PWD}/tmp/myclash.service /etc/systemd/system/myclash.service
     systemctl daemon-reload
-    systemctl enable clash.service
-    systemctl start clash.service
+    systemctl enable myclash.service
+    systemctl start myclash.service
 
 }
 
@@ -249,7 +215,6 @@ read -n 1 -s -r -p "Press any key to continue..." key
 echo "\n\n"
 mkvenv
 download_clash
-download_dashboard
 if [[ "$use_cache" != "--deactivate-for-sudo" ]]; then
     env_sudoers_add
 fi
@@ -257,7 +222,6 @@ fi
 
 rm -rf ${MYCLASH_ROOT_PWD}/clash
 install_clash
-install_dashboard
 
 echo "设置环境变量"
 # 生成env_prefix.sh

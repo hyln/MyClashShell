@@ -44,11 +44,10 @@ def replace_placeholders(file_path,outpath, replacements):
 if __name__ == "__main__":
     if len(sys.argv) < 4:
         print("Usage: ${MYCLASH_ROOT_PWD}/ubuntu/scripts/gen_placehold_fill_file.py <file_path> <outpath> <replacements>")
-        print("Example: ${MYCLASH_ROOT_PWD}/ubuntu/scripts/gen_placehold_fill_file.py ${MYCLASH_ROOT_PWD}/ubuntu/assets/clash_dashboard.service ${MYCLASH_ROOT_PWD}/tmp/clash_dashboard.service 1.0.0 ${MYCLASH_ROOT_PWD}")
+        print("Example: ${MYCLASH_ROOT_PWD}/ubuntu/scripts/gen_placehold_fill_file.py ${MYCLASH_ROOT_PWD}/ubuntu/template/myclash.service ${MYCLASH_ROOT_PWD}/tmp/myclash.service ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD}")
         sys.exit(1)
     replacements = sys.argv[3:]
     replace_placeholders(sys.argv[1], sys.argv[2], replacements)
     # # 示例调用
     # # 提供替换值列表，替换占位符为指定的值
     # replacements = ["1.0.0", f"{myclash_root_pwd}"]
-    # replace_placeholders(f"{myclash_root_pwd}/ubuntu/assets/clash_dashboard.service", f"{myclash_root_pwd}/tmp/clash_dashboard.service" ,replacements)
