@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 import requests
 
-from tui.config_api import normalize_runtime_config
+from .config_api import normalize_runtime_config
 
 
 class ClashClient:

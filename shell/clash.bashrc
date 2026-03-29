@@ -1,5 +1,5 @@
 #!/bin/bash
-source ${MYCLASH_ROOT_PWD}/tools/common_func.sh
+source ${MYCLASH_ROOT_PWD}/scripts/tools/common_func.sh
 myclash()
 {
     case $1 in
@@ -19,7 +19,7 @@ myclash()
             curl --location 'http://127.0.0.1:9090/logs'
         elif [ $2 = "update_subcribe" ]; then
             myclash shell off
-            ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/ubuntu/scripts/update_proxy_config.py
+            ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/update_proxy_config.py
             myclash shell on
         else
             echo command $1 $2 not exist
@@ -55,14 +55,67 @@ myclash()
         fi
         ;;
     'cfg')
-        ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/ubuntu/scripts/myclash.py $1 $2
+        ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/myclash.py $1 $2
         ;;
     'change_subscribe')
-        ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/ubuntu/scripts/change_sub.py $2
+        ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/change_sub.py $2
         ;;
     'tui')
         PYTHONPATH="${MYCLASH_ROOT_PWD}" \
-            ${MYCLASH_ROOT_PWD}/venv/bin/python3 -m tui ${2:+$2}
+            ${MYCLASH_ROOT_PWD}/venv/bin/python3 -m scripts.tui ${2:+$2}
+        ;;
+    'share')
+        case $2 in
+        'serve')
+            PORT="${3:-${MYCLASH_SLAVE_SERVE_PORT:-8765}}"
+            PIDF="${MYCLASH_ROOT_PWD}/tmp/slave_http_server.pid"
+            LOGF="${MYCLASH_ROOT_PWD}/tmp/slave_http_server.log"
+            mkdir -p "${MYCLASH_ROOT_PWD}/tmp"
+            if [ -f "$PIDF" ]; then
+                OLD=$(cat "$PIDF")
+                if kill -0 "$OLD" 2>/dev/null; then
+                    echo "slave 脚本 HTTP 已在运行 (pid=$OLD)。先执行: myclash share stop"
+                    return 1
+                fi
+                rm -f "$PIDF"
+            fi
+            nohup env MYCLASH_ROOT_PWD="${MYCLASH_ROOT_PWD}" \
+                ${MYCLASH_ROOT_PWD}/venv/bin/python3 \
+                "${MYCLASH_ROOT_PWD}/scripts/runtime/slave_http_server.py" \
+                --bind "${MYCLASH_SLAVE_SERVE_BIND:-0.0.0.0}" --port "$PORT" \
+                >>"$LOGF" 2>&1 &
+            echo $! >"$PIDF"
+            echo "slave 脚本 HTTP 已后台启动 pid=$(cat "$PIDF") 端口=$PORT"
+            echo "Slave 示例: curl -fsSL http://<本机局域网IP>:${PORT}/slave_bootstrap.sh | sudo bash -s -- <本机IP> <Clash HTTP 代理端口>"
+            echo "日志: $LOGF"
+            ;;
+        'stop')
+            PIDF="${MYCLASH_ROOT_PWD}/tmp/slave_http_server.pid"
+            if [ ! -f "$PIDF" ]; then
+                echo "无 pid 文件，可能未启动"
+                return 1
+            fi
+            PID=$(cat "$PIDF")
+            if kill -0 "$PID" 2>/dev/null; then
+                kill "$PID" && echo "已停止 pid=$PID"
+            else
+                echo "进程已不存在，清理 pid 文件"
+            fi
+            rm -f "$PIDF"
+            ;;
+        'status')
+            PIDF="${MYCLASH_ROOT_PWD}/tmp/slave_http_server.pid"
+            if [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; then
+                echo "运行中 pid=$(cat "$PIDF")"
+            else
+                echo "未运行"
+            fi
+            ;;
+        *)
+            echo "用法: myclash share serve [端口] | myclash share stop | myclash share status"
+            echo "默认端口 8765；可用环境变量 MYCLASH_SLAVE_SERVE_PORT / MYCLASH_SLAVE_SERVE_BIND"
+            ;;
+        esac
         ;;
     'help')
         echo "myclash [command*] [option*]"
@@ -72,6 +125,8 @@ myclash()
         echo "      shell [ on/off ]"
         echo "      cfg"
         echo "      tui [proxy_group(optional)]"
+        echo "      share serve [端口] | share stop | share status"
+        echo "          本机 HTTP 提供 slave_bootstrap.sh（局域网 curl 安装 Slave）"
         echo "======================"
         echo "Remark"
         echo "[command] service 负责管理clash服务"
@@ -85,8 +140,8 @@ myclash()
         ;;
     *)
         # ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/tools/gui/gui.py
-        echo Myclash $(cat ${MYCLASH_ROOT_PWD}/ubuntu/version)
-        bash ${MYCLASH_ROOT_PWD}/tools/test_proxy_status.sh > /dev/null
+        echo Myclash $(cat ${MYCLASH_ROOT_PWD}/install/version)
+        bash ${MYCLASH_ROOT_PWD}/scripts/tools/test_proxy_status.sh > /dev/null
         if [ $? = 0 ] 
         then
             echo -n "当前状态："
@@ -113,7 +168,10 @@ _myclash()
 
     case $cmd in
     'myclash')
-        COMPREPLY=( $(compgen -W 'service window shell help cfg change_subscribe tui' -- $cur) )
+        COMPREPLY=( $(compgen -W 'service window shell help cfg change_subscribe tui share' -- $cur) )
+        ;;
+    'share')
+        COMPREPLY=( $(compgen -W 'serve stop status' -- $cur) )
         ;;
     'service')
         COMPREPLY=( $(compgen -W 'start stop restart status get_logs update_subcribe' -- $cur) ) 
@@ -131,7 +189,7 @@ _myclash()
 complete -F _myclash myclash
 
 # Auto start Proxy in Terminal
-shell_proxy_default=$(${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/tools/read_yaml.py shell_proxy_default)
+shell_proxy_default=$(${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/tools/read_yaml.py shell_proxy_default)
 if [ $shell_proxy_default = "ON" ]; then
     export http_proxy=http://127.0.0.1:7890
     export https_proxy=http://127.0.0.1:7890

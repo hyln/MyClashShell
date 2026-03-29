@@ -8,7 +8,7 @@ Type=simple
 TimeoutStartSec=30
 WorkingDirectory=<|PLACEHOLD_1|>
 Environment=MYCLASH_ROOT_PWD=<|PLACEHOLD_2|>
-ExecStart=<|PLACEHOLD_1|>/venv/bin/python3 <|PLACEHOLD_2|>/ubuntu/scripts/clash_supervisor.py
+ExecStart=<|PLACEHOLD_1|>/venv/bin/python3 <|PLACEHOLD_2|>/scripts/runtime/clash_supervisor.py
 ExecStop=/bin/kill -TERM $MAINPID
 Restart=always
 RestartSec=10s

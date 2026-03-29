@@ -1,19 +1,13 @@
-"""Run: PYTHONPATH=<repo_root> python -m tui [optional_proxy_group]"""
+"""Backward-compatible entry: ``PYTHONPATH=<repo> python -m tui`` → ``scripts.tui``."""
 
 from __future__ import annotations
 
-import sys
 
-try:
-    from textual.app import App  # noqa: F401
-except ImportError:
-    print(
-        "Textual is required. Install with:\n"
-        "  ${MYCLASH_ROOT_PWD}/venv/bin/pip install textual",
-        file=sys.stderr,
-    )
-    sys.exit(1)
+def main() -> None:
+    from scripts.tui.__main__ import main as _run
 
-from tui.app import main
+    _run()
 
-main()
+
+if __name__ == "__main__":
+    main()

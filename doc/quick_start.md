@@ -10,11 +10,14 @@ myclashshell 仅提供对Ubuntu平台的支持
 ```bash
 git clone https://github.com/hyaline-wang/MyClashShell.git
 cd MyClashShell
-sudo ./ubuntu/install.sh
-# sudo ./ubuntu/install.sh --use-cache # 如果已经安装过一遍了，正在重新装，可以不重复下载
+sudo ./install/install.sh
+# sudo ./install/install.sh --use-cache # 如果已经安装过一遍了，正在重新装，可以不重复下载
 ########## 
 source /etc/bash.bashrc ;source ~/.bashrc
 ```
+
+卸载（通常需 root）：`sudo ./install/uninstall.sh`，然后手动删除本仓库目录。
+
 安装完成后
 1. 使用 `myclash` 命令查看软件信息
 3. 通过`myclash help` 查看帮助

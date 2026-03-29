@@ -11,3 +11,4 @@ tmp
 *.log
 user_config.yaml
 venv
+typescript

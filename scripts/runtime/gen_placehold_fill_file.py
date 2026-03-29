@@ -43,8 +43,8 @@ def replace_placeholders(file_path,outpath, replacements):
 
 if __name__ == "__main__":
     if len(sys.argv) < 4:
-        print("Usage: ${MYCLASH_ROOT_PWD}/ubuntu/scripts/gen_placehold_fill_file.py <file_path> <outpath> <replacements>")
-        print("Example: ${MYCLASH_ROOT_PWD}/ubuntu/scripts/gen_placehold_fill_file.py ${MYCLASH_ROOT_PWD}/ubuntu/template/myclash.service ${MYCLASH_ROOT_PWD}/tmp/myclash.service ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD}")
+        print("Usage: ${MYCLASH_ROOT_PWD}/scripts/runtime/gen_placehold_fill_file.py <file_path> <outpath> <replacements>")
+        print("Example: ${MYCLASH_ROOT_PWD}/scripts/runtime/gen_placehold_fill_file.py ${MYCLASH_ROOT_PWD}/install/templates/myclash.service ${MYCLASH_ROOT_PWD}/tmp/myclash.service ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD}")
         sys.exit(1)
     replacements = sys.argv[3:]
     replace_placeholders(sys.argv[1], sys.argv[2], replacements)

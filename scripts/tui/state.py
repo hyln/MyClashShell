@@ -8,7 +8,7 @@ import threading
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
-    from tui.client import ClashClient
+    from .client import ClashClient
 
 
 class TuiState:
@@ -17,6 +17,7 @@ class TuiState:
         self.groups: list[str] = []
         self.group_idx = 0
         self.nodes: list[str] = []
+        self.node_types: dict[str, str] = {}
         self.current_node = ""
         self.selected_idx = 0
         self.delays: dict[str, int | None] = {}
@@ -92,6 +93,14 @@ class TuiState:
         group_name = self.groups[self.group_idx]
         group_data = proxies.get(group_name, {})
         self.nodes = list(group_data.get("all", []))
+        self.node_types = {}
+        for n in self.nodes:
+            ent = proxies.get(n)
+            if isinstance(ent, dict):
+                t = ent.get("type")
+                self.node_types[n] = str(t) if t is not None else ""
+            else:
+                self.node_types[n] = ""
         raw_now = group_data.get("now")
         if raw_now is None:
             raw_now = group_data.get("Now")

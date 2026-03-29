@@ -41,8 +41,8 @@ download_clash(){
     sudo apt install -y curl vim wget python3 python3-pip
     print_err_and_exit_if_failed "apt 安装失败,请检查网络连接"
 
-    ${MYCLASH_ROOT_PWD}/venv/bin/python3 -m pip install pyyaml colorlog requests textual
-    print_err_and_exit_if_failed "pyyaml | colorlog 安装失败,请检查网络连接"
+    ${MYCLASH_ROOT_PWD}/venv/bin/python3 -m pip install pyyaml ruamel.yaml colorlog requests textual eclipse-zenoh
+    print_err_and_exit_if_failed "pyyaml | ruamel.yaml | colorlog 安装失败,请检查网络连接"
 
     echo "===下载程序==="
     if [ -f "${MYCLASH_ROOT_PWD}/tmp/clash.gz" ]; then
@@ -93,18 +93,18 @@ install_clash(){
     cp ${MYCLASH_ROOT_PWD}/tmp/Country.mmdb ${MYCLASH_ROOT_PWD}/clash/configs/Country.mmdb
 
     # 读取version文件
-    if [ -f "${MYCLASH_ROOT_PWD}/ubuntu/version" ]; then
-        version=$(cat "${MYCLASH_ROOT_PWD}/ubuntu/version")
+    if [ -f "${MYCLASH_ROOT_PWD}/install/version" ]; then
+        version=$(cat "${MYCLASH_ROOT_PWD}/install/version")
         echo "当前版本: $version"
     else
-        echo "未找到版本文件: ${MYCLASH_ROOT_PWD}/ubuntu/version"
+        echo "未找到版本文件: ${MYCLASH_ROOT_PWD}/install/version"
     fi
     # 检查 user_config.yaml 是否存在
     if [ ! -f "${MYCLASH_ROOT_PWD}/user_config.yaml" ]; then
         echo "未找到 user_config.yaml，将重新生成。"
         # 生成 user_config
-        ${MYCLASH_ROOT_PWD}/ubuntu/scripts/gen_placehold_fill_file.py  \
-        ${MYCLASH_ROOT_PWD}/ubuntu/template/user_config.yaml \
+        ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/gen_placehold_fill_file.py  \
+        ${MYCLASH_ROOT_PWD}/install/templates/user_config.yaml \
         ${MYCLASH_ROOT_PWD}/user_config.yaml \
         ${version}
         chmod 666 ${MYCLASH_ROOT_PWD}/user_config.yaml
@@ -118,8 +118,8 @@ install_clash(){
             echo "user_config.yaml 版本($config_version)与当前版本($version)不一致，将重新生成。"
             rm -f "${MYCLASH_ROOT_PWD}/user_config.yaml"
             # 生成 user_config
-            ${MYCLASH_ROOT_PWD}/ubuntu/scripts/gen_placehold_fill_file.py  \
-            ${MYCLASH_ROOT_PWD}/ubuntu/template/user_config.yaml \
+            ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/gen_placehold_fill_file.py  \
+            ${MYCLASH_ROOT_PWD}/install/templates/user_config.yaml \
             ${MYCLASH_ROOT_PWD}/user_config.yaml \
             ${version}
             chmod 666 ${MYCLASH_ROOT_PWD}/user_config.yaml
@@ -127,7 +127,7 @@ install_clash(){
     fi
 
     # create empty 
-    cp ${MYCLASH_ROOT_PWD}/ubuntu/template/empty.yaml ${MYCLASH_ROOT_PWD}/clash/configs/config.yaml 
+    cp ${MYCLASH_ROOT_PWD}/install/templates/empty.yaml ${MYCLASH_ROOT_PWD}/clash/configs/config.yaml 
     chmod 666  ${MYCLASH_ROOT_PWD}/clash/configs/config.yaml 
 
 
@@ -154,8 +154,8 @@ install_clash(){
     rm -f /etc/systemd/system/myclash.service
 
     echo "安装 myclash.service（Python 托管 Clash）"
-    ${MYCLASH_ROOT_PWD}/ubuntu/scripts/gen_placehold_fill_file.py  \
-    ${MYCLASH_ROOT_PWD}/ubuntu/template/myclash.service \
+    ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/gen_placehold_fill_file.py  \
+    ${MYCLASH_ROOT_PWD}/install/templates/myclash.service \
     ${MYCLASH_ROOT_PWD}/tmp/myclash.service \
     ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD}
     mv ${MYCLASH_ROOT_PWD}/tmp/myclash.service /etc/systemd/system/myclash.service
@@ -194,8 +194,8 @@ dependenciesUrl=https://gitee.com/wangdaochuan/resource_backup/releases/download
 bashrcPath=$(echo $(pwd)/$0 | awk '{split($0,a,"install.sh"); print a[1]}')
 
 export MYCLASH_ROOT_PWD=$(realpath ${bashrcPath}/..)
-source ${MYCLASH_ROOT_PWD}/tools/common_func.sh # 常用函数
-source ${MYCLASH_ROOT_PWD}/ubuntu/PROMPT.sh # 提示语
+source ${MYCLASH_ROOT_PWD}/scripts/tools/common_func.sh # 常用函数
+source ${MYCLASH_ROOT_PWD}/install/prompt.sh # 提示语
 # echo ${MYCLASH_ROOT_PWD}
 
 # root user check
@@ -208,7 +208,7 @@ use_cache=$1
 
 #############################################
 
-cat ${MYCLASH_ROOT_PWD}/tools/logo.txt
+cat ${MYCLASH_ROOT_PWD}/scripts/tools/logo.txt
 # 使用须知
 myclashinfo_welcome
 read -n 1 -s -r -p "Press any key to continue..." key
@@ -225,8 +225,8 @@ install_clash
 
 echo "设置环境变量"
 # 生成env_prefix.sh
-${MYCLASH_ROOT_PWD}/ubuntu/scripts/gen_placehold_fill_file.py  \
-${MYCLASH_ROOT_PWD}/ubuntu/template/env_prefix.txt \
+${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/gen_placehold_fill_file.py  \
+${MYCLASH_ROOT_PWD}/install/templates/env_prefix.txt \
 ${MYCLASH_ROOT_PWD}/tmp/env_prefix.txt \
 ${MYCLASH_ROOT_PWD} 
 

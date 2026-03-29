@@ -1,5 +1,5 @@
 #!/bin/bash
-source ${MYCLASH_ROOT_PWD}/tools/common_func.sh
+source ${MYCLASH_ROOT_PWD}/scripts/tools/common_func.sh
 export http_proxy=http://127.0.0.1:7890
 export https_proxy=http://127.0.0.1:7890
 echo "测试Google连接"
