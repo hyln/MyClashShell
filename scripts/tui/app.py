@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -20,6 +21,8 @@ from textual import on
 from textual.actions import SkipAction
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.dom import DOMNode
+from textual.screen import ModalScreen
 from textual.events import Key
 from textual.widget import Widget
 from textual.theme import BUILTIN_THEMES, Theme
@@ -62,6 +65,7 @@ from .formatting import (
     clash_log_searchable,
     clash_log_to_rich,
 )
+from .lan_constants import lan_config_http_port, lan_udp_port
 from .lan_share import (
     LanPeer,
     LanShareHub,
@@ -69,10 +73,88 @@ from .lan_share import (
     pick_lan_host,
     random_pin3,
     slave_http_serve_port,
-    zenoh_available,
 )
 from .state import TuiState
 from .widgets import ProxyNodeButton, ProxyNodeRows, ProxyNodeScroll, ProxyRightPanel
+
+_ANSI_ESCAPE_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
+_SUB_REFRESH_LOG_MAX_CHARS = 48_000
+
+
+def _strip_ansi(s: str) -> str:
+    return _ANSI_ESCAPE_RE.sub("", s)
+
+
+def _subscribe_refresh_log_text(proc: subprocess.CompletedProcess[str]) -> str:
+    out = (proc.stdout or "").rstrip()
+    err = (proc.stderr or "").rstrip()
+    chunks: list[str] = []
+    if out:
+        chunks.append("stdout:\n" + _strip_ansi(out))
+    if err:
+        chunks.append("stderr:\n" + _strip_ansi(err))
+    if not chunks:
+        return (
+            "（本进程未捕获到 stdout/stderr；若脚本只写文件，请查看仓库根目录 app.log）\n"
+            f"退出码: {proc.returncode}"
+        )
+    text = "\n\n".join(chunks)
+    if len(text) > _SUB_REFRESH_LOG_MAX_CHARS:
+        text = (
+            f"… 输出过长，仅显示末尾 {_SUB_REFRESH_LOG_MAX_CHARS} 字符 …\n\n"
+            + text[-_SUB_REFRESH_LOG_MAX_CHARS:]
+        )
+    return text
+
+
+class SubscribeRefreshLogModal(ModalScreen[None]):
+    """展示 update_proxy_config.py 的终端输出。"""
+
+    BINDINGS = [Binding("escape", "dismiss", "关闭")]
+
+    DEFAULT_CSS = """
+    SubscribeRefreshLogModal {
+        align: center middle;
+    }
+    SubscribeRefreshLogModal > #refresh-log-shell {
+        width: 88%;
+        max-width: 120;
+        height: 75%;
+        border: thick $primary;
+        background: $surface;
+        padding: 0 1;
+    }
+    SubscribeRefreshLogModal #refresh-log-scroll {
+        height: 1fr;
+        border: solid $boost;
+        background: $panel;
+        margin: 1 0;
+    }
+    SubscribeRefreshLogModal #refresh-log-body {
+        margin: 1;
+    }
+    """
+
+    def __init__(self, log_text: str, returncode: int) -> None:
+        super().__init__()
+        self._log_text = log_text
+        self._returncode = returncode
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="refresh-log-shell"):
+            rc = self._returncode
+            status = "成功" if rc == 0 else "失败"
+            yield Label(f"update_proxy_config · {status} · 退出码 {rc}")
+            with VerticalScroll(id="refresh-log-scroll"):
+                yield Static(self._log_text, id="refresh-log-body")
+            yield Button("关闭 (Esc)", id="refresh-log-close", variant="primary")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "refresh-log-close":
+            self.dismiss()
+
+    def action_dismiss(self) -> None:
+        self.dismiss()
 
 
 def _atom_one_dark_theme_no_purple() -> Theme:
@@ -380,6 +462,13 @@ class ClashTuiApp(App[None]):
     }
     """
 
+    def _get_dom_base(self) -> DOMNode:
+        """栈顶为 ModalScreen 时，仍从主界面屏查询 #status-line 等控件（见 Textual App.default_screen）。"""
+        stack = self._screen_stack
+        if len(stack) > 1:
+            return stack[0]
+        return super()._get_dom_base()
+
     BINDINGS = [
         Binding("q", "quit", "Quit", show=False),
         Binding(
@@ -585,7 +674,7 @@ class ClashTuiApp(App[None]):
                                         yield Button("刷新订阅", id="sub-refresh-btn", variant="warning")
                     with Vertical(id="view-share", classes="view-pane"):
                         yield Static("共享", classes="page-title")
-                        yield Static("", id="share-zenoh-status", markup=False)
+                        yield Static("", id="share-lan-status", markup=False)
                         with Horizontal(classes="cfg-row"):
                             yield Label("局域网发现", classes="cfg-label")
                             yield Switch(value=False, id="share-lan-switch")
@@ -604,6 +693,14 @@ class ClashTuiApp(App[None]):
                                 yield Select([], id="share-peer-select", allow_blank=True)
                                 yield Input(placeholder="对方屏幕上显示的 PIN", id="share-pull-pin", password=True)
                                 yield Button("拉取选中主机 config.yaml", id="share-pull-btn", variant="warning")
+                                yield Static("手动拉取（自动发现不可用，例如部分热点）", classes="config-section-title")
+                                with Horizontal(classes="cfg-row"):
+                                    yield Label("对方 IP", classes="cfg-label")
+                                    yield Input(placeholder="192.168.x.x", id="share-manual-ip")
+                                with Horizontal(classes="cfg-row"):
+                                    yield Label("config 端口", classes="cfg-label")
+                                    yield Input(str(lan_config_http_port()), id="share-manual-config-port")
+                                yield Button("按 IP 拉取 config", id="share-manual-pull-btn", variant="warning")
                             with Vertical(id="share-ms", classes="view-pane"):
                                 yield Static("在 Slave 上执行（需 root）", classes="config-section-title")
                                 yield RichLog(id="share-slave-cmd", max_lines=30, auto_scroll=True, markup=False)
@@ -736,9 +833,19 @@ class ClashTuiApp(App[None]):
 
     def _on_view_switched(self, vid: str) -> None:
         if vid == "view-config":
-            self.run_worker(self._load_config_async(), group="config", exit_on_error=False)
+            self.run_worker(
+                self._load_config_async(),
+                group="config",
+                exclusive=True,
+                exit_on_error=False,
+            )
         elif vid == "view-subscribe":
-            self.run_worker(self._load_subscribe_async(), group="subscribe", exit_on_error=False)
+            self.run_worker(
+                self._load_subscribe_async(),
+                group="subscribe",
+                exclusive=True,
+                exit_on_error=False,
+            )
         elif vid == "view-share":
             self._update_share_pin_display()
             self._update_slave_cmd_text()
@@ -1158,50 +1265,68 @@ class ClashTuiApp(App[None]):
             )
             return
         self._sub_refresh_busy = True
-        self.query_one("#sub-refresh-btn", Button).disabled = True
         try:
-            proc = await asyncio.to_thread(
-                subprocess.run,
-                [str(py), str(script)],
-                cwd=root,
-                env={
-                    **os.environ,
-                    "http_proxy": "",
-                    "https_proxy": "",
-                    "HTTP_PROXY": "",
-                    "HTTPS_PROXY": "",
-                },
-                capture_output=True,
-                text=True,
-                timeout=120,
+            self.query_one("#sub-refresh-btn", Button).disabled = True
+        except Exception:
+            pass
+        self.run_worker(
+            self._subscribe_refresh_worker(root, py, script),
+            group="subscribe-refresh",
+            exclusive=True,
+            exit_on_error=False,
+        )
+
+    async def _subscribe_refresh_worker(
+        self, root: str, py: Path, script: Path
+    ) -> None:
+        """在 worker 内跑子进程与 push_screen_wait（Textual 要求 wait_for_dismiss 仅能在 worker 中使用）。"""
+        proc: subprocess.CompletedProcess[str] | None = None
+        try:
+            try:
+                proc = await asyncio.to_thread(
+                    subprocess.run,
+                    [str(py), str(script)],
+                    cwd=root,
+                    env={
+                        **os.environ,
+                        "PYTHONUNBUFFERED": "1",
+                        "http_proxy": "",
+                        "https_proxy": "",
+                        "HTTP_PROXY": "",
+                        "HTTPS_PROXY": "",
+                    },
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+            except subprocess.TimeoutExpired:
+                self.notify("刷新订阅超时", severity="error", timeout=4)
+            except Exception as exc:
+                self.notify(f"刷新失败: {exc}", severity="error", timeout=5)
+            if proc is None:
+                return
+            log_text = _subscribe_refresh_log_text(proc)
+            await self.push_screen_wait(
+                SubscribeRefreshLogModal(log_text, proc.returncode)
             )
-        except subprocess.TimeoutExpired:
-            self.notify("刷新订阅超时", severity="error", timeout=4)
-            return
-        except Exception as exc:
-            self.notify(f"刷新失败: {exc}", severity="error", timeout=5)
-            return
+            if proc.returncode != 0:
+                return
+            try:
+                self._state.refresh_groups_and_nodes()
+                self._state.last_error = ""
+            except Exception as exc:
+                self._state.last_error = str(exc)
+            await self._rebuild_group_list_async()
+            await self._rebuild_cards_async()
+            self._refresh_card_contents()
+            self._sync_proxy_chrome()
+            self._sync_main_footer()
         finally:
             self._sub_refresh_busy = False
             try:
                 self.query_one("#sub-refresh-btn", Button).disabled = False
             except Exception:
                 pass
-        if proc.returncode != 0:
-            tail = (proc.stderr or proc.stdout or "").strip()[:240]
-            self.notify(f"刷新失败 (exit {proc.returncode}): {tail}", severity="error", timeout=6)
-            return
-        self.notify("已刷新订阅", severity="information", timeout=3)
-        try:
-            self._state.refresh_groups_and_nodes()
-            self._state.last_error = ""
-        except Exception as exc:
-            self._state.last_error = str(exc)
-        await self._rebuild_group_list_async()
-        await self._rebuild_cards_async()
-        self._refresh_card_contents()
-        self._sync_proxy_chrome()
-        self._sync_main_footer()
 
     def _on_auto_timer(self) -> None:
         if self._state.testing:
@@ -1567,13 +1692,7 @@ class ClashTuiApp(App[None]):
         self._safe_call_from_thread(self._refresh_share_peer_list)
 
     def _sync_lan_hub(self) -> None:
-        st = self.query_one("#share-zenoh-status", Static)
-        if not zenoh_available():
-            st.update("未安装 eclipse-zenoh：请在 venv 中 pip install eclipse-zenoh")
-            if self._lan_hub:
-                self._lan_hub.stop()
-                self._lan_hub = None
-            return
+        st = self.query_one("#share-lan-status", Static)
         cfgp = self._share_config_path()
         if not cfgp or not cfgp.is_file():
             st.update("未找到 clash/configs/config.yaml（检查 MYCLASH_ROOT_PWD）")
@@ -1597,6 +1716,7 @@ class ClashTuiApp(App[None]):
         self._lan_hub = LanShareHub(
             node_id=self._share_node_id,
             get_http_port=self._get_share_http_port,
+            get_config_port=lan_config_http_port,
             get_display_name=lambda: socket.gethostname(),
             get_pin=lambda: self._share_pin,
             config_yaml_path=str(cfgp),
@@ -1604,7 +1724,10 @@ class ClashTuiApp(App[None]):
             offer_config=bool(offer),
         )
         self._lan_hub.start()
-        st.update(f"Zenoh 已启动 · 本机 node_id={self._share_node_id}")
+        offer_note = "提供配置 HTTP 已开" if offer else "仅发现、不提供配置拉取"
+        st.update(
+            f"UDP {lan_udp_port()} 组播 224.0.0.251 · 配置 HTTP {lan_config_http_port()} · {offer_note} · node_id={self._share_node_id}"
+        )
 
     def _refresh_share_peer_list(self) -> None:
         try:
@@ -1613,7 +1736,10 @@ class ClashTuiApp(App[None]):
             return
         peers = self._lan_hub.snapshot_peers() if self._lan_hub else {}
         order = sorted(peers.values(), key=lambda p: (p.name, p.node_id))
-        opts = [(f"{p.name}  {p.host}:{p.http_port}  [{p.node_id}]", p.node_id) for p in order]
+        opts = [
+            (f"{p.name}  {p.host}:{p.http_port} cfg:{p.config_port}  [{p.node_id}]", p.node_id)
+            for p in order
+        ]
         try:
             sel.set_options(opts)
         except Exception:
@@ -1667,18 +1793,23 @@ class ClashTuiApp(App[None]):
         if len(pin) != 3 or not pin.isdigit():
             self.notify("请输入对方屏幕上显示的 3 位 PIN", severity="warning")
             return
-        if not zenoh_available():
-            self.notify("未安装 eclipse-zenoh", severity="error")
-            return
         cfgp = self._share_config_path()
         if not cfgp:
             self.notify("MYCLASH_ROOT_PWD 未设置", severity="error")
             return
-        import asyncio
+        peers = self._lan_hub.snapshot_peers() if self._lan_hub else {}
+        peer = peers.get(nid)
+        if not peer:
+            self.notify("未找到该主机信息", severity="error")
+            return
         loop = asyncio.get_running_loop()
         self.notify("正在拉取配置…", timeout=2)
         try:
-            raw = await loop.run_in_executor(None, lambda: fetch_remote_config(nid, pin))
+            h, cp, pn = peer.host, peer.config_port, pin
+            raw = await loop.run_in_executor(
+                None,
+                lambda h=h, cp=cp, pn=pn: fetch_remote_config(h, cp, pn),
+            )
         except Exception as exc:
             self.notify(f"拉取失败: {exc}", severity="error", timeout=6)
             return
@@ -1696,6 +1827,53 @@ class ClashTuiApp(App[None]):
             timeout=8,
         )
 
+    @on(Button.Pressed, "#share-manual-pull-btn")
+    def share_manual_pull_pressed(self) -> None:
+        self.run_worker(self._share_manual_pull_worker(), exclusive=True, exit_on_error=False)
+
+    async def _share_manual_pull_worker(self) -> None:
+        host = self.query_one("#share-manual-ip", Input).value.strip()
+        port_s = self.query_one("#share-manual-config-port", Input).value.strip()
+        pin = self.query_one("#share-pull-pin", Input).value.strip()
+        if not host:
+            self.notify("请填写对方 IP", severity="warning")
+            return
+        try:
+            cport = int(port_s) if port_s else lan_config_http_port()
+        except ValueError:
+            self.notify("config 端口无效", severity="warning")
+            return
+        if len(pin) != 3 or not pin.isdigit():
+            self.notify("请输入对方屏幕上显示的 3 位 PIN", severity="warning")
+            return
+        cfgp = self._share_config_path()
+        if not cfgp:
+            self.notify("MYCLASH_ROOT_PWD 未设置", severity="error")
+            return
+        loop = asyncio.get_running_loop()
+        self.notify("正在拉取配置…", timeout=2)
+        try:
+            h, cp, pn = host, cport, pin
+            raw = await loop.run_in_executor(
+                None,
+                lambda h=h, cp=cp, pn=pn: fetch_remote_config(h, cp, pn),
+            )
+        except Exception as exc:
+            self.notify(f"拉取失败: {exc}", severity="error", timeout=6)
+            return
+        backup = cfgp.parent / f"{cfgp.name}.bak.{int(time.time())}"
+        try:
+            if cfgp.is_file():
+                backup.write_bytes(cfgp.read_bytes())
+            cfgp.write_bytes(raw)
+        except OSError as exc:
+            self.notify(f"写入失败: {exc}", severity="error", timeout=6)
+            return
+        self.notify(
+            f"已写入 {cfgp}，备份 {backup.name}。请执行: sudo systemctl restart myclash",
+            severity="information",
+            timeout=8,
+        )
 
     @on(Input.Changed, "#logs-filter")
     def filter_logs(self, event: Input.Changed) -> None:
