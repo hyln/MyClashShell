@@ -1,10 +1,13 @@
 #!/bin/bash
-if (( $EUID != 0 )); then
+if (( EUID != 0 )); then
     echo "Please run as root"
-    exit
+    exit 1
 fi
-
-rm -rf clash
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
+cd "${ROOT}" || exit 1
+echo "卸载目录: ${ROOT}"
+rm -rf "${ROOT}/clash"
 systemctl disable clash
 echo remove old clash.service
 rm -f /etc/systemd/system/clash.service >> /dev/null

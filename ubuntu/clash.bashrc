@@ -23,6 +23,7 @@ myclash()
         elif [ $2 = "update_subcribe" ]; then
             myclash shell off
             ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/ubuntu/scripts/update_proxy_config.py
+            sudo systemctl restart clash
             myclash shell on
         else
             echo command $1 $2 not exist
@@ -62,6 +63,7 @@ myclash()
         ;;
     'change_subscribe')
         ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/ubuntu/scripts/change_sub.py $2
+        sudo systemctl restart clash
         ;;        
     'help')
         echo "myclash [command*] [option*]"
@@ -94,8 +96,10 @@ myclash()
         fi
         # current_config_name=$(${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/tools/read_yaml.py default_subscribe)
         current_config_name=$(cat ${MYCLASH_ROOT_PWD}/tmp/current_sub.txt)
+        current_core=$(cat ${MYCLASH_ROOT_PWD}/tmp/current_core.txt 2>/dev/null || echo clash)
 
         echo "当前使用配置: $current_config_name"
+        echo "当前代理内核: $current_core (clash=原版, mihomo=Meta/AnyTLS 等)"
         echo "你可以通过 myclash help 查看帮助"
         echo "==================================="
         echo "若需要使用程序控制面板，请打开网页"

@@ -3,8 +3,9 @@ Description=clash
 After=multi-user.target
 [Service]
 TimeoutStartSec=30
-ExecStart=<|PLACEHOLD_1|>/clash/clash -d clash/configs
-WorkingDirectory=<|PLACEHOLD_2|>
+Environment=MYCLASH_ROOT_PWD=<|PLACEHOLD_1|>
+WorkingDirectory=<|PLACEHOLD_1|>
+ExecStart=<|PLACEHOLD_1|>/clash/launch-core.sh
 ExecStop=/bin/kill $MAINPID
 Restart=always
 RestartSec=10s

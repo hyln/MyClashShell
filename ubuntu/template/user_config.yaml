@@ -4,6 +4,10 @@ subscribes:
   your_proxy_name: "<you_proxy_url>"
 # 默认使用订阅，你可以填subscribe_urls中的任意名字,DEFAULT 是指使用 subscribe_urls 中的第一个
 default_subscribe: "DEFAULT"
+# 以下订阅名使用 Mihomo 内核（与 clash 二进制并存于 clash/ 目录），用于 AnyTLS 等新协议；未列出的仍用原版 clash
+mihomo_subscribes: []
+# 对 mihomo_subscribes 中的订阅，下载时把 target=clash 换成 clash.meta 并使用 flag=clash.meta（不需要可改为 false）
+mihomo_clash_meta_convert: true
 
 ##########  dashboard setting  #############
 ## you need restart service after change dashboard setting

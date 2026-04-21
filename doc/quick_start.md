@@ -29,6 +29,9 @@ source /etc/bash.bashrc ;source ~/.bashrc
 shell_proxy_default: 'ON'  #  ON / OFF
 subscribes:
     <your_proxy_name>: "<you_proxy_url>"
+# 若某订阅需 Mihomo（如 AnyTLS），见下文「Mihomo 与原版 Clash 并存」
+# mihomo_subscribes:
+#   - <your_proxy_name>
 default_subscribe: "DEFAULT"
 ```
  - shell_proxy_default: 选择是否自动在命令行开启代理，保存即生效
@@ -52,6 +55,40 @@ subscribes:
     <your_proxy_name_3>: "<you_proxy_url_3>"
 default_subscribe: "DEFAULT"
 ```
+
+### Mihomo 与原版 Clash 并存（AnyTLS 等）
+
+部分机场节点使用 **AnyTLS** 等仅 **Clash Meta（Mihomo）** 支持的协议。本仓库在安装时会同时放置：
+
+| 文件 | 说明 |
+|------|------|
+| `clash/clash` | 原有内核，兼容常见 Clash 订阅 |
+| `clash/mihomo` | Meta 内核，用于 AnyTLS 等 |
+| `clash/launch-core.sh` | 根据当前订阅名选择上述之一启动 |
+
+在 `user_config.yaml` 中，用 **`mihomo_subscribes`** 列出要走 Mihomo 的订阅**键名**（必须与 `subscribes` 下的 key 一致）；**未**出现在列表中的订阅仍使用原版 `clash`。
+
+```yaml
+subscribes:
+  sub: "https://example.com/subscribe/xxx/clash/"
+  other: "https://converter.example/sub?target=clash&url=..."
+# 与 subscribes 的键名一致；仅这些订阅用 Mihomo
+mihomo_subscribes:
+  - sub
+# 可选。对「带 subconverter、且 URL 中含 target=clash」的链接，自动改为 target=clash.meta 并使用 flag=clash.meta；若转换器不兼容可设为 false
+mihomo_clash_meta_convert: true
+default_subscribe: "sub"
+```
+
+说明：
+
+- 执行 **`myclash service update_subcribe`** 或 **`myclash change_subscribe <名>`** 后，会写入 `tmp/current_core.txt` 并 **重启 `clash` 服务**，以切换到对应内核。
+- 无参执行 **`myclash`** 时，会显示当前订阅名与当前内核（`clash` / `mihomo`）。
+- 若机器上仍是旧安装、缺少 `mihomo` 或 `launch-core.sh`，可在仓库根目录执行（将路径换成你的安装根目录，通常即克隆目录）：
+  ```bash
+  sudo MYCLASH_ROOT_PWD=/path/to/MyClashShell bash ubuntu/apply_mihomo_sidecar.sh
+  ```
+- 机场若提供 **直连 Clash 订阅** 且内容已是 Meta 格式（含 `type: anytls` 等），可不套 subconverter；否则按机场说明使用转换链接，并视情况开启 `mihomo_clash_meta_convert`。
 
 ### 更改clash参数
 

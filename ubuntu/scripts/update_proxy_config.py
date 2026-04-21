@@ -7,12 +7,16 @@ import yaml
 import util
 import logging
 import colorlog
+import subscribe_runtime
 
-def download_profile(profile_name:str,url:str):
+def download_profile(profile_name: str, url: str, output_flag: str = "clash"):
     '''
     下载profile
     '''
-    full_url = f"{url}&flag=clash"
+    if "flag=" in url:
+        full_url = url
+    else:
+        full_url = f"{url}&flag={output_flag}"
 
     logger.info(f'{profile_name} : "{full_url}"')
 
@@ -115,8 +119,11 @@ if __name__=="__main__":
                 raise TypeError("[ERROR] 没有找到订阅信息")
             logger.info("====Update Config====")
             for key, value in sub_dict.items():
-                if(util.is_valid_url(value)):
-                    ret = download_profile(key,value)
+                dl_url, out_flag = subscribe_runtime.prepare_download_url(
+                    value, key, dictionary
+                )
+                if(util.is_valid_url(dl_url)):
+                    ret = download_profile(key, dl_url, out_flag)
                     if ret:
                         download_configs.append(key)
                 else:
@@ -145,6 +152,7 @@ if __name__=="__main__":
             util.update_config_by_api(gen_rule_cfg_pwd)
             with open(f"{raw_configs_dir}/current_sub.txt", "w") as file:
                 file.write(default_subcribe)
+            subscribe_runtime.write_current_core(myclash_root_pwd, default_subcribe)
         else:
             logger.info("merge {} configs".format(download_configs[0]))
             merge_proxy.merge_cfg(
@@ -156,6 +164,7 @@ if __name__=="__main__":
             util.update_config_by_api(gen_rule_cfg_pwd)
             with open(f"{raw_configs_dir}/current_sub.txt", "w") as file:
                 file.write(download_configs[0])
+            subscribe_runtime.write_current_core(myclash_root_pwd, download_configs[0])
     else:
         if(len(download_configs) == 0):
             logger.error("没有找到任何可用的代理")

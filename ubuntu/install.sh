@@ -1,5 +1,25 @@
 #!/bin/bash
 
+# 重装时常 clash 未启动，环回代理会导致 apt/wget 连不上镜像站
+strip_local_proxy_for_install() {
+    local v val
+    for v in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy ftp_proxy FTP_PROXY; do
+        val="${!v-}"
+        [[ -z "$val" ]] && continue
+        if [[ "$val" == *127.0.0.1* || "$val" == *localhost* || "$val" == *\[::1\]* ]]; then
+            unset "$v"
+        fi
+    done
+}
+
+# 覆盖 apt.conf.d 里可能存在的本机代理，仅作用于本脚本内的 apt 调用
+apt_get_direct() {
+    apt-get \
+        -o Acquire::http::Proxy= \
+        -o Acquire::https::Proxy= \
+        -o Acquire::ftp::Proxy= \
+        "$@"
+}
 
 mkvenv() {
     # 用法: mkvenv [env_name]
@@ -16,7 +36,7 @@ mkvenv() {
     # 检查 venv 模块
     if ! python3 -m venv --help >/dev/null 2>&1; then
         echo "⚠️  正在安装 python3-venv..."
-        apt update && apt install -y python3-venv
+        apt_get_direct update && apt_get_direct install -y python3-venv
     fi
 
     # 创建虚拟环境（放在 ${MYCLASH_ROOT_PWD} 下）
@@ -73,7 +93,7 @@ download_clash(){
     mkdir -p "${MYCLASH_ROOT_PWD}/tmp"
     chmod -R 777 "${MYCLASH_ROOT_PWD}/tmp"
     echo "===安装依赖==="
-    sudo apt install -y curl vim wget python3 python3-pip
+    apt_get_direct install -y curl vim wget python3 python3-pip
     print_err_and_exit_if_failed "apt 安装失败,请检查网络连接"
 
     ${MYCLASH_ROOT_PWD}/venv/bin/python3 -m pip install pyyaml colorlog requests
@@ -112,6 +132,30 @@ download_clash(){
 
 
 }
+download_mihomo(){
+    mkdir -p "${MYCLASH_ROOT_PWD}/tmp"
+    chmod -R 777 "${MYCLASH_ROOT_PWD}/tmp"
+    MIHOMO_TAG="v1.19.24"
+    arch=$(uname -m)
+    if [ "$arch" = x86_64 ]; then
+        mihomo_asset="mihomo-linux-amd64-compatible-${MIHOMO_TAG}.gz"
+    elif [ "$arch" = aarch64 ]; then
+        mihomo_asset="mihomo-linux-arm64-${MIHOMO_TAG}.gz"
+    else
+        echo "跳过 Mihomo 下载: 架构 $arch 未配置对应发行包"
+        return 0
+    fi
+    if [ -f "${MYCLASH_ROOT_PWD}/tmp/mihomo.gz" ]; then
+        echo "mihomo.gz 已存在，跳过下载"
+        return 0
+    fi
+    mihomo_url="https://github.com/MetaCubeX/mihomo/releases/download/${MIHOMO_TAG}/${mihomo_asset}"
+    echo "===下载 Mihomo (${MIHOMO_TAG})==="
+    wget "${mihomo_url}" -O "${MYCLASH_ROOT_PWD}/tmp/mihomo.gz" || {
+        echo "警告: Mihomo 下载失败，AnyTLS 等需手动将二进制保存为 ${MYCLASH_ROOT_PWD}/clash/mihomo"
+        rm -f "${MYCLASH_ROOT_PWD}/tmp/mihomo.gz"
+    }
+}
 install_clash(){
     echo "===安装==="
     mkdir -p ${MYCLASH_ROOT_PWD}/clash
@@ -126,7 +170,17 @@ install_clash(){
 
     chmod +x ${MYCLASH_ROOT_PWD}/clash/clash
 
-    cp ${MYCLASH_ROOT_PWD}/tmp/Country.mmdb {MYCLASH_ROOT_PWD}/clash/configs/Country.mmdb 
+    cp ${MYCLASH_ROOT_PWD}/tmp/Country.mmdb ${MYCLASH_ROOT_PWD}/clash/configs/Country.mmdb
+
+    if [ -f "${MYCLASH_ROOT_PWD}/tmp/mihomo.gz" ]; then
+        gunzip -c ${MYCLASH_ROOT_PWD}/tmp/mihomo.gz > ${MYCLASH_ROOT_PWD}/clash/mihomo
+        chmod +x ${MYCLASH_ROOT_PWD}/clash/mihomo
+        echo "已安装 Mihomo 至 clash/mihomo"
+    else
+        echo "未找到 tmp/mihomo.gz，跳过 Mihomo（需要 AnyTLS 时请运行 ubuntu/apply_mihomo_sidecar.sh 或重新安装）"
+    fi
+    cp "${MYCLASH_ROOT_PWD}/ubuntu/template/launch-core.sh" "${MYCLASH_ROOT_PWD}/clash/launch-core.sh"
+    chmod +x "${MYCLASH_ROOT_PWD}/clash/launch-core.sh"
 
     # 读取version文件
     if [ -f "${MYCLASH_ROOT_PWD}/ubuntu/version" ]; then
@@ -183,14 +237,11 @@ install_clash(){
     rm -f /etc/systemd/system/clash.service >> /dev/null
 
 
-    # 设置clash.service
-    clash_exec="${MYCLASH_ROOT_PWD}/clash/clash"
-    clash_config="${MYCLASH_ROOT_PWD}/clash/configs"
-    # 生成clash.service
+    # 生成clash.service（三处占位符均为安装根目录）
     ${MYCLASH_ROOT_PWD}/ubuntu/scripts/gen_placehold_fill_file.py  \
     ${MYCLASH_ROOT_PWD}/ubuntu/template/clash.service \
     ${MYCLASH_ROOT_PWD}/tmp/clash.service \
-    ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD}
+    ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD} ${MYCLASH_ROOT_PWD}
     mv ${MYCLASH_ROOT_PWD}/tmp/clash.service /etc/systemd/system/clash.service
     # 启动clash.service
     systemctl daemon-reload
@@ -237,6 +288,8 @@ if (( $EUID != 0 )); then
     failed_and_exit "Please run as root"
 fi
 
+strip_local_proxy_for_install
+
 # get arguments
 use_cache=$1
 
@@ -249,6 +302,7 @@ read -n 1 -s -r -p "Press any key to continue..." key
 echo "\n\n"
 mkvenv
 download_clash
+download_mihomo
 download_dashboard
 if [[ "$use_cache" != "--deactivate-for-sudo" ]]; then
     env_sudoers_add

@@ -5,6 +5,7 @@ import logging
 import argparse
 import util
 import merge_proxy
+import subscribe_runtime
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description="Change subscription URL")
@@ -71,6 +72,7 @@ if __name__=="__main__":
             util.update_config_by_api(gen_rule_cfg_pwd)
             with open(f"{raw_configs_dir}/current_sub.txt", "w") as file:
                 file.write(new_subscribe)
+            subscribe_runtime.write_current_core(myclash_root_pwd, new_subscribe)
             
         except SystemExit:
             print("更新失败，请检查配置文件")
