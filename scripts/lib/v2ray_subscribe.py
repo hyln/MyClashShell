@@ -32,12 +32,7 @@ from typing import Any
 
 import yaml
 
-from scripts.lib.clash_rules_to_v2ray import (
-    clash_rules_to_v2ray_routing,
-    routing_with_proxy_balancer,
-)
 from scripts.lib.paths import download_cache_dir, mcs_configs_dir
-from scripts.runtime import merge_proxy
 
 
 def _load_v2ray_existing_for_merge(
@@ -553,32 +548,6 @@ def _proxy_inbounds_from_user_config(doc: dict[str, Any]) -> list[dict[str, Any]
     return out
 
 
-def _load_clash_rules_lines_for_v2ray(
-    myclash_root: Path, user_doc: dict[str, Any] | None
-) -> list[str] | None:
-    """与 Clash 合并阶段一致：若 ``user_config`` 配置了 ``rules_template`` 且文件含 ``rules`` 列表则返回之。"""
-    rt = merge_proxy.resolve_rules_template_path(
-        str(myclash_root),
-        user_doc.get("rules_template") if isinstance(user_doc, dict) else None,
-    )
-    if not rt:
-        return None
-    p = Path(rt)
-    if not p.is_file():
-        return None
-    try:
-        doc = yaml.safe_load(p.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    if not isinstance(doc, dict):
-        return None
-    rules = doc.get("rules")
-    if not isinstance(rules, list):
-        return None
-    lines = [str(x) for x in rules if isinstance(x, str)]
-    return lines or None
-
-
 def _v2ray_fixed_outbound_tag(user_doc: dict[str, Any] | None) -> str:
     """``user_config.yaml`` 中可选 ``v2ray_outbound_tag``：多节点时固定走该 outbound tag；缺省或无效则多节点用随机 balancer。"""
     if not isinstance(user_doc, dict):
@@ -593,8 +562,7 @@ def _assemble_v2ray_config(
     existing: dict[str, Any] | None,
     proxy_outbounds: list[dict[str, Any]],
     user_doc: dict[str, Any] | None = None,
-    clash_rules_lines: list[str] | None = None,
-) -> tuple[dict[str, Any], bool]:
+) -> dict[str, Any]:
     base = dict(existing) if isinstance(existing, dict) else {}
     log = base.get("log") if isinstance(base.get("log"), dict) else {"loglevel": "warning"}
     base_inb = base.get("inbounds")
@@ -606,64 +574,28 @@ def _assemble_v2ray_config(
         t = str(ob.get("tag") or f"sub-{i}")
         ob["tag"] = t
         tags.append(t)
-    routing: dict[str, Any] = {"domainStrategy": "AsIs", "rules": []}
-    tail_extra: list[dict[str, Any]] = []
-    used_clash_rules_routing = False
-    if clash_rules_lines:
-        fixed = _v2ray_fixed_outbound_tag(user_doc)
-        tag_set = frozenset(tags)
-        if len(tags) == 1:
-            use_balancer = False
-            fixed_proxy_tag = tags[0]
-        elif fixed and fixed in tag_set:
-            use_balancer = False
-            fixed_proxy_tag = fixed
-        else:
-            use_balancer = True
-            fixed_proxy_tag = tags[0]
-        conv = clash_rules_to_v2ray_routing(
-            clash_rules_lines,
-            proxy_tags=tags,
-            fixed_proxy_tag=fixed_proxy_tag,
-            use_balancer=use_balancer,
-            balancer_tag="proxy",
-        )
-        if conv and conv.get("rules"):
-            routing = {"domainStrategy": conv["domainStrategy"], "rules": conv["rules"]}
-            if use_balancer and len(tags) > 1:
-                routing = routing_with_proxy_balancer(routing, proxy_tags=tags)
-            if conv.get("needs_block"):
-                tail_extra.append({"protocol": "blackhole", "tag": "block"})
-            used_clash_rules_routing = True
-        else:
-            clash_rules_lines = None
-
-    if not clash_rules_lines or not routing.get("rules"):
-        routing = {"domainStrategy": "AsIs", "rules": []}
-        if len(tags) == 1:
-            routing["rules"] = [{"type": "field", "network": "tcp,udp", "outboundTag": tags[0]}]
-        elif len(tags) > 1:
-            fixed = _v2ray_fixed_outbound_tag(user_doc)
-            tag_set = frozenset(tags)
-            if fixed and fixed in tag_set:
-                routing["rules"] = [{"type": "field", "network": "tcp,udp", "outboundTag": fixed}]
-            else:
-                routing["balancers"] = [
-                    {
-                        "tag": "proxy",
-                        "selector": tags,
-                        "strategy": {"type": "random"},
-                    }
-                ]
-                routing["rules"] = [{"type": "field", "network": "tcp,udp", "balancerTag": "proxy"}]
-
     tail = [
-        *tail_extra,
         {"protocol": "freedom", "tag": "direct"},
     ]
     outbounds = [*proxy_outbounds, *tail]
-    cfg = {"log": log, "inbounds": inb, "outbounds": outbounds, "routing": routing}
-    return cfg, used_clash_rules_routing
+    routing: dict[str, Any] = {"domainStrategy": "AsIs", "rules": []}
+    if len(tags) == 1:
+        routing["rules"] = [{"type": "field", "network": "tcp,udp", "outboundTag": tags[0]}]
+    elif len(tags) > 1:
+        fixed = _v2ray_fixed_outbound_tag(user_doc)
+        tag_set = frozenset(tags)
+        if fixed and fixed in tag_set:
+            routing["rules"] = [{"type": "field", "network": "tcp,udp", "outboundTag": fixed}]
+        else:
+            routing["balancers"] = [
+                {
+                    "tag": "proxy",
+                    "selector": tags,
+                    "strategy": {"type": "random"},
+                }
+            ]
+            routing["rules"] = [{"type": "field", "network": "tcp,udp", "balancerTag": "proxy"}]
+    return {"log": log, "inbounds": inb, "outbounds": outbounds, "routing": routing}
 
 
 def download_v2ray_subscription_outbounds(
@@ -747,15 +679,7 @@ def write_v2ray_json_from_outbounds(
         myclash_root, profile_name, include_mcs=use_mcs
     )
     user_doc = _load_user_config_doc(myclash_root)
-    clash_lines = _load_clash_rules_lines_for_v2ray(myclash_root, user_doc)
-    cfg, used_rules_tpl = _assemble_v2ray_config(
-        existing, outbounds, user_doc, clash_rules_lines=clash_lines
-    )
-    if used_rules_tpl and isinstance(cfg.get("routing"), dict):
-        logger.info(
-            "v2ray：已将 rules_template 转为路由（%d 条）",
-            len(cfg["routing"].get("rules") or []),
-        )
+    cfg = _assemble_v2ray_config(existing, outbounds, user_doc)
     cache_path = download_cache_dir(myclash_root) / f"{profile_name}.json"
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
