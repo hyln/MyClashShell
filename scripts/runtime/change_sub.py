@@ -60,12 +60,19 @@ if __name__=="__main__":
                 raise TypeError("[ERROR] 没有找到订阅信息")
             if(new_subscribe not in sub_dict):
                 raise TypeError("[ERROR] 不存在此订阅")
+            rules_template_resolved = merge_proxy.resolve_rules_template_path(
+                myclash_root_pwd,
+                dictionary.get("rules_template") if dictionary else None,
+            )
+            slim_pg = merge_proxy.slim_proxy_groups_enabled(dictionary)
             custum_proxy_path = myclash_root_pwd + "/custom_configs"
             logger.info("merge {} configs".format(new_subscribe))
             merge_proxy.merge_cfg(
                 raw_rule_path=f"{raw_configs_dir}/{new_subscribe}.yaml",
                 custum_rule_path=f"{custum_proxy_path}/{new_subscribe}.yaml",
-                gen_cfg_path=gen_rule_cfg_pwd
+                gen_cfg_path=gen_rule_cfg_pwd,
+                rules_template_path=rules_template_resolved,
+                slim_proxy_groups=slim_pg,
             )
             logger.info("代理更新完成: 使用: {}".format(new_subscribe))
             util.update_config_by_api(gen_rule_cfg_pwd)

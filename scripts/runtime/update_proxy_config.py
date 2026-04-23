@@ -5,6 +5,7 @@ import warnings
 import traceback
 import yaml
 import util
+import merge_proxy
 import logging
 import colorlog
 
@@ -106,9 +107,16 @@ if __name__=="__main__":
     # read yaml and find avilable cfg
     download_configs = []
     default_subcribe = None
+    rules_template_resolved = None
+    slim_pg = False
     with open(user_config_path, "r") as stream:
         try:
             dictionary = yaml.safe_load(stream)
+            rules_template_resolved = merge_proxy.resolve_rules_template_path(
+                myclash_root_pwd,
+                dictionary.get("rules_template") if dictionary else None,
+            )
+            slim_pg = merge_proxy.slim_proxy_groups_enabled(dictionary)
             default_subcribe = dictionary.get("default_subscribe")
             sub_dict = dictionary.get("subscribes")
             if(sub_dict is None):
@@ -132,14 +140,15 @@ if __name__=="__main__":
         # subprocess.run("rm -rf {}".format(gen_rule_cfg_pwd), shell = True, executable="/bin/bash")
         # subprocess.run("mkdir {}".format(gen_rule_cfg_pwd), shell = True, executable="/bin/bash")
 
-        import merge_proxy
         custum_proxy_path = myclash_root_pwd + "/custom_configs"
         if (default_subcribe in download_configs):
             logger.info("merge {} configs".format(default_subcribe))
             merge_proxy.merge_cfg(
                 raw_rule_path=f"{raw_configs_dir}/{default_subcribe}.yaml",
                 custum_rule_path=f"{custum_proxy_path}/{default_subcribe}.yaml",
-                gen_cfg_path=gen_rule_cfg_pwd
+                gen_cfg_path=gen_rule_cfg_pwd,
+                rules_template_path=rules_template_resolved,
+                slim_proxy_groups=slim_pg,
             )
             logger.info("代理更新完成: 使用: {}".format(default_subcribe))
             util.update_config_by_api(gen_rule_cfg_pwd)
@@ -150,7 +159,9 @@ if __name__=="__main__":
             merge_proxy.merge_cfg(
                 raw_rule_path=f"{raw_configs_dir}/{download_configs[0]}.yaml",
                 custum_rule_path=f"{custum_proxy_path}/{download_configs[0]}.yaml",
-                gen_cfg_path=gen_rule_cfg_pwd
+                gen_cfg_path=gen_rule_cfg_pwd,
+                rules_template_path=rules_template_resolved,
+                slim_proxy_groups=slim_pg,
             )
             logger.info("代理更新完成: 未找到指定profile，代理使用: {}".format(download_configs[0]))
             util.update_config_by_api(gen_rule_cfg_pwd)

@@ -5,6 +5,13 @@ subscribes:
 # 默认使用订阅，你可以填subscribe_urls中的任意名字,DEFAULT 是指使用 subscribe_urls 中的第一个
 default_subscribe: "DEFAULT"
 
+# 订阅合并后，用该文件的 rules 整段替换提供商自带 rules（保留订阅里的 proxies / proxy-groups）。
+# 路径相对 MYCLASH_ROOT；删除本项或留空则不替换。
+rules_template: install/templates/rules.yaml
+
+# 合并后仅用 Via-Proxy（全部节点 + DIRECT），替换订阅自带 proxy-groups；与 rules 中 Via-Proxy / DIRECT 搭配
+slim_proxy_groups: true
+
 ################### lan share ###############
 # Master-Master 共享模式：
 # - enabled: 是否启用局域网发现（默认 true）
