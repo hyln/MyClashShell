@@ -142,18 +142,6 @@ export http_proxy="http://172.17.0.1:7890"
 > 1. 添加一个规则直连aws (未测试)
 > 2. 将 `shell_proxy_default` 改为 `OFF` (已测试) -->
 
-### chatgpt
+### 自定义规则
 
-1. 添加一下字段 其中 `<your_sub_name>` 是你设置的订阅名,`<proxy-group>` 一个能正常访问google的代理组
-
-    ```yaml
-    custom-rule-<your_sub_name>:
-    use_node: "<proxy-group>"
-    domain:
-      - DOMAIN-SUFFIX,openai.com,GPT
-      - DOMAIN-SUFFIX,auth0.com,GPT
-      - DOMAIN-SUFFIX,bing.com,GPT
-      - DOMAIN-SUFFIX,live.com,GPT
-    ```
-2. 使用 `myclash config update` 完成更新 
-3. 现在应该可以正常使用 chatgpt 了，你也可在尝试时通过 `myclash service get-logs` 监控openai的网站是否使用了设置的规则
+请直接在`user_config.yaml` 的 `rules_template` 所指文件（默认 `install/templates/rules.yaml`）里，为 其他需要的域名追加规则，策略名用你合并后的组名（启用 `slim_proxy_groups` 时一般为 `Via-Proxy`）。保存后执行 `myclash service update_subcribe` 下载并合并订阅。需要可在 `myclash service get_logs` 中核对是否走代理。

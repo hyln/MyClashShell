@@ -20,21 +20,12 @@ share:
   enabled: true
   offer_config: true
 
-################### custom rule ############
-## you need "myclash service update_cfg" after change custom rule
+################### clash 监听 / API（合并进 custom_configs/<订阅名>.yaml 时覆盖订阅同名字段）############
+## 修改 custom_configs 后需重新合并配置（如 myclash service update_subcribe）
 port: 7890
 socks-port: 7891
 allow-lan: true
 mode: Rule
 log-level: info
 external-controller: :9090
-direct-rule:
-  - DOMAIN-SUFFIX,miwifi.com
-  - IP-CIDR,192.168.1.0/24
-# custom-rule-<your_proxy_name>:
-#   use_node: "🚀 选择节点"
-#   domain:
-#     # example
-#     - DOMAIN-SUFFIX,miwifi.com
-#     - IP-CIDR,192.168.1.0/24
 ############################################
