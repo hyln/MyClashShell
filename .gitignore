@@ -1,13 +1,13 @@
-clash
+mcs
 back
 config_urls
 config_custom.yaml
-custom_configs/*.yaml
-!custom_configs/example.yaml
 sub_configs
 **/__pycache__/
 config.yaml
 tmp
+cache
 *.log
 user_config.yaml
 venv
+typescript

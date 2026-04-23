@@ -1,6 +1,0 @@
-# clash_env_set_start
-export MYCLASH_ROOT_PWD=<|PLACEHOLD_1|>
-if [ -f ${MYCLASH_ROOT_PWD}/ubuntu/clash.bashrc ]; then
-    source ${MYCLASH_ROOT_PWD}/ubuntu/clash.bashrc 
-fi
-# clash_env_set_end

@@ -2,7 +2,7 @@
 
 基于clash core构建，能够帮你自动配置命令行版本的clash并提供简单的使用方法，无需图形化界面支持，方便一些没有图形化界面的嵌入式设备使用。
 
-[Quickstart](./doc/quick_start.md)
+[动机说明](./doc/motivation.md) · [Quickstart](./doc/quick_start.md) · [局域网共享](./doc/lan_share.md)
 
 ```                            
                     SS                   88        
@@ -38,5 +38,9 @@ myclash shell off
 
 myclash window off
 myclash window on
+
+myclash tui [代理组名] # 在终端打开节点面板（`python -m scripts.tui`；兼容 `python -m tui`）
+# 可选：export MYCLASH_TUI_THEME=tokyo-night 切换 TUI 配色（内置主题名见 Textual 文档）
+# TUI 字号/字体由终端模拟器决定；等宽推荐 JetBrains Mono、Cascadia Code；中英文混排可用 Sarasa Gothic / Maple Mono
 
 ```

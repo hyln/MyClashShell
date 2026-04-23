@@ -1,0 +1,12 @@
+[unit]
+Description=clash-compatible proxy (mihomo as mcs/bin/clash)
+After=multi-user.target
+[Service]
+TimeoutStartSec=30
+ExecStart=<|PLACEHOLD_1|>/mcs/bin/clash -d mcs/configs
+WorkingDirectory=<|PLACEHOLD_2|>
+ExecStop=/bin/kill $MAINPID
+Restart=always
+RestartSec=10s
+[Install]
+WantedBy=multi-user.target

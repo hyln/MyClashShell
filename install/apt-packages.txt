@@ -1,0 +1,8 @@
+# install_root.sh 会按行 apt 安装（忽略空行与 # 注释）
+curl
+vim
+wget
+unzip
+python3
+python3-pip
+python3-venv
