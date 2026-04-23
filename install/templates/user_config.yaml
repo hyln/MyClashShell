@@ -5,6 +5,14 @@ subscribes:
 # 默认使用订阅，你可以填subscribe_urls中的任意名字,DEFAULT 是指使用 subscribe_urls 中的第一个
 default_subscribe: "DEFAULT"
 
+################### lan share ###############
+# Master-Master 共享模式：
+# - enabled: 是否启用局域网发现（默认 true）
+# - offer_config: 是否允许他机用 PIN 拉取本机 config（默认 true）
+share:
+  enabled: true
+  offer_config: true
+
 ################### custom rule ############
 ## you need "myclash service update_cfg" after change custom rule
 port: 7890

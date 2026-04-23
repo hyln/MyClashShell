@@ -107,6 +107,21 @@ def _subscribe_refresh_log_text(proc: subprocess.CompletedProcess[str]) -> str:
     return text
 
 
+def _to_bool(value: Any, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    s = str(value).strip().lower()
+    if s in {"1", "true", "yes", "on"}:
+        return True
+    if s in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 class SubscribeRefreshLogModal(ModalScreen[None]):
     """展示 update_proxy_config.py 的终端输出。"""
 
@@ -522,12 +537,13 @@ class ClashTuiApp(App[None]):
         self._share_pin = random_pin3()
         self._lan_hub: LanShareHub | None = None
         self._share_peers: dict[str, LanPeer] = {}
-        self._share_lan_enabled = False
+        self._share_lan_enabled = True
         self._sub_refresh_busy = False
         self._sub_subscribes: dict[str, str] = {}
         self._sub_names_order: list[str] = []
         self._sub_default_silent = False
         self._proxy_group_sync = False
+        self._proxy_lazy_init_done = False
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="root"):
@@ -729,22 +745,32 @@ class ClashTuiApp(App[None]):
     async def on_mount(self) -> None:
         self.register_theme(_atom_one_dark_theme_no_purple())
         self.refresh_css(animate=False)
-        try:
-            self._state.refresh_groups_and_nodes()
-        except Exception as exc:
-            self._state.last_error = str(exc)
-        await self._rebuild_group_list_async()
-        await self._rebuild_cards_async()
+        # 代理节点多时，逐 mount 按钮很慢；默认在「概览」不必先建整表，等进入代理页再建。
         rows = self.query_one("#proxy-rows", Vertical)
         rows.can_focus = True
         self.query_one("#overview-charts", Vertical).can_focus = True
         self.query_one("#sidebar-nav", ListView).focus()
         self.set_interval(1.0, self._tick_overview)
-        self._start_delay_test_with_ui()
         if self._auto_refresh_s > 0:
             self.set_interval(float(self._auto_refresh_s), self._on_auto_timer)
         nav = self.query_one("#sidebar-nav", ListView)
         self._apply_sidebar_index(nav.index if nav.index is not None else 0)
+        # 首次拉 /proxies、读 user_config、起 LAN 线程放在 worker，避免阻塞首帧（内核未起或 API 慢时尤其明显）。
+        self.run_worker(
+            self._bootstrap_after_mount_async(),
+            group="tui-bootstrap",
+            exclusive=True,
+            exit_on_error=False,
+        )
+
+    async def _bootstrap_after_mount_async(self) -> None:
+        try:
+            await asyncio.to_thread(self._state.refresh_groups_and_nodes)
+        except Exception as exc:
+            self._state.last_error = str(exc)
+        await self._rebuild_group_list_async()
+        self._load_share_settings_from_yaml()
+        self._sync_lan_hub()
 
     def on_unmount(self) -> None:
         self._log_stop.set()
@@ -850,6 +876,13 @@ class ClashTuiApp(App[None]):
             self._update_share_pin_display()
             self._update_slave_cmd_text()
             self._refresh_share_peer_list()
+        elif vid == "view-proxies":
+            self.run_worker(
+                self._ensure_proxy_grid_async(),
+                group="proxy-grid-init",
+                exclusive=True,
+                exit_on_error=False,
+            )
         elif vid == "view-logs":
             self._ensure_log_tail()
 
@@ -863,12 +896,13 @@ class ClashTuiApp(App[None]):
                 try:
                     url = f"{self._client.base_url}/logs"
                     params = {"level": "info"}
+                    # 读超时不能为 None，否则无新日志时会在 read 上挂很久，退出 TUI 会明显卡顿。
                     with requests.get(
                         url,
                         params=params,
                         headers=self._client._headers(),
                         stream=True,
-                        timeout=(10, None),
+                        timeout=(3, 1),
                     ) as r:
                         r.raise_for_status()
                         for line in r.iter_lines(decode_unicode=True):
@@ -878,10 +912,13 @@ class ClashTuiApp(App[None]):
                                 continue
                             self._safe_call_from_thread(self._append_log_line, line)
                 except Exception as exc:
+                    if self._log_stop.is_set():
+                        return
                     self._safe_call_from_thread(
                         self._append_log_line, f"[log stream error] {exc} (retrying…)"
                     )
-                    time.sleep(2)
+                    if self._log_stop.wait(timeout=0.5):
+                        return
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1491,6 +1528,14 @@ class ClashTuiApp(App[None]):
         await self._rebuild_group_list_async()
         await self._rebuild_cards_async()
 
+    async def _ensure_proxy_grid_async(self) -> None:
+        """首次进入代理页时再挂载节点按钮并触发测速，避免启动时在概览页卡很久。"""
+        if self._proxy_lazy_init_done:
+            return
+        await self._rebuild_cards_async()
+        self._start_delay_test_with_ui()
+        self._proxy_lazy_init_done = True
+
     async def _rebuild_cards_async(self) -> None:
         rows = self.query_one("#proxy-rows", Vertical)
         await rows.remove_children()
@@ -1661,6 +1706,46 @@ class ClashTuiApp(App[None]):
             return None
         return clash_config_yaml(Path(root))
 
+    def _load_share_settings_from_yaml(self) -> None:
+        p = user_config_path()
+        if not p or not p.is_file():
+            return
+        try:
+            data = load_user_config_dict(p)
+        except Exception:
+            return
+        raw_share = data.get("share")
+        enabled = True
+        offer = True
+        if isinstance(raw_share, dict):
+            enabled = _to_bool(raw_share.get("enabled"), True)
+            offer = _to_bool(raw_share.get("offer_config"), True)
+        self._share_lan_enabled = enabled
+        try:
+            self.query_one("#share-lan-switch", Switch).value = enabled
+        except Exception:
+            pass
+        try:
+            self.query_one("#share-offer-config", Switch).value = offer
+        except Exception:
+            pass
+
+    def _persist_share_settings_to_yaml(self) -> None:
+        p = user_config_path()
+        if not p:
+            return
+        data = load_user_config_dict(p)
+        raw = data.get("share")
+        if not isinstance(raw, dict):
+            data["share"] = {
+                "enabled": bool(self._share_lan_enabled),
+                "offer_config": bool(self.query_one("#share-offer-config", Switch).value),
+            }
+        else:
+            raw["enabled"] = bool(self._share_lan_enabled)
+            raw["offer_config"] = bool(self.query_one("#share-offer-config", Switch).value)
+        save_user_config_dict(p, data)
+
     def _update_share_pin_display(self) -> None:
         try:
             self.query_one("#share-pin-display", Static).update(self._share_pin)
@@ -1735,24 +1820,40 @@ class ClashTuiApp(App[None]):
         except Exception:
             return
         peers = self._lan_hub.snapshot_peers() if self._lan_hub else {}
-        order = sorted(peers.values(), key=lambda p: (p.name, p.node_id))
+        # 发现包会持续到达，刷新下拉框时保留现有选中值，避免“刚选中就被重置”。
+        prev = None if sel.is_blank() else sel.value
+        order = sorted(
+            (p for p in peers.values() if p.node_id != self._share_node_id),
+            key=lambda p: (p.name, p.node_id),
+        )
         opts = [
             (f"{p.name}  {p.host}:{p.http_port} cfg:{p.config_port}  [{p.node_id}]", p.node_id)
             for p in order
         ]
         try:
             sel.set_options(opts)
+            valid = {p.node_id for p in order}
+            if prev is not None and prev in valid:
+                sel.value = prev
         except Exception:
             pass
 
     @on(Switch.Changed, "#share-lan-switch")
     def share_lan_changed(self, event: Switch.Changed) -> None:
         self._share_lan_enabled = bool(event.value)
+        try:
+            self._persist_share_settings_to_yaml()
+        except Exception:
+            pass
         self._sync_lan_hub()
         self._refresh_share_peer_list()
 
     @on(Switch.Changed, "#share-offer-config")
     def share_offer_changed(self, event: Switch.Changed) -> None:
+        try:
+            self._persist_share_settings_to_yaml()
+        except Exception:
+            pass
         if self._share_lan_enabled:
             self._sync_lan_hub()
 

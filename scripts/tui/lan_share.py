@@ -210,13 +210,20 @@ class LanShareHub:
 
     def stop(self) -> None:
         self._stop.set()
+        # 从主线程关闭 UDP 套接字，可立刻打断对端线程里阻塞的 recvfrom，避免退出时干等。
+        sock = self._udp_sock
+        if sock is not None:
+            try:
+                sock.close()
+            except OSError:
+                pass
         if self._httpd:
             try:
                 self._httpd.shutdown()
             except Exception:
                 pass
         if self._http_thread:
-            self._http_thread.join(timeout=4.0)
+            self._http_thread.join(timeout=0.35)
             self._http_thread = None
         if self._httpd:
             try:
@@ -225,7 +232,7 @@ class LanShareHub:
                 pass
             self._httpd = None
         if self._udp_thread:
-            self._udp_thread.join(timeout=4.0)
+            self._udp_thread.join(timeout=0.35)
             self._udp_thread = None
         self._memberships.clear()
         with self._peers_lock:

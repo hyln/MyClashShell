@@ -141,6 +141,35 @@ myclash()
     *)
         # ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/tools/gui/gui.py
         echo Myclash $(cat ${MYCLASH_ROOT_PWD}/install/version)
+        # 从 user_config.yaml 读取常用项（与 TUI / 脚本约定一致）
+        HTTP_PORT=7890
+        _p=$("${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/tools/read_yaml.py" port 2>/dev/null)
+        if [[ "$_p" =~ ^[0-9]+$ ]]; then
+            HTTP_PORT="$_p"
+        fi
+        export MYCLASH_HTTP_PORT="${HTTP_PORT}"
+        _al=$("${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/tools/read_yaml.py" allow-lan 2>/dev/null)
+        case "$_al" in
+            [Tt]rue|1|[Yy]es|[Oo]n) LAN_TXT="已开启" ;;
+            [Ff]alse|0|[Nn]o|[Oo]ff) LAN_TXT="已关闭" ;;
+            *) LAN_TXT="未知" ;;
+        esac
+        API_BASE="http://127.0.0.1:9090"
+        _ec=$("${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/tools/read_yaml.py" external-controller 2>/dev/null)
+        if [[ -n "$_ec" ]]; then
+            if [[ "$_ec" == http://* || "$_ec" == https://* ]]; then
+                API_BASE="$_ec"
+            elif [[ "$_ec" == :* ]]; then
+                API_BASE="http://127.0.0.1${_ec}"
+            elif [[ "$_ec" == 0.0.0.0:* ]]; then
+                API_BASE="http://127.0.0.1:${_ec#0.0.0.0:}"
+            elif [[ "$_ec" == *:* ]]; then
+                API_BASE="http://${_ec}"
+            fi
+        fi
+        echo "---- Clash Core Summary ----"
+        echo "HTTP 代理端口: ${HTTP_PORT}  (socks 见 user_config 中 socks-port)"
+        echo "允许局域网 (allow-lan): ${LAN_TXT}"
         bash ${MYCLASH_ROOT_PWD}/scripts/tools/test_proxy_status.sh > /dev/null
         if [ $? = 0 ] 
         then
@@ -157,7 +186,6 @@ myclash()
         echo "你可以通过 myclash help 查看帮助"
         echo "==================================="
         echo "终端控制面板: myclash tui"
-        echo "REST API: http://127.0.0.1:9090"
     esac
     
 }

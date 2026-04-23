@@ -22,7 +22,17 @@ class ClashClient:
             headers["Authorization"] = f"Bearer {self.secret}"
         return headers
 
-    def _get_json(self, path: str, params: dict | None = None, timeout: float = 4) -> Any:
+    def _get_json(
+        self,
+        path: str,
+        params: dict | None = None,
+        timeout: float | tuple[float, float] | None = None,
+    ) -> Any:
+        # 分开 connect/read，避免错误地址或内核未起时 TCP 握手拖很久（体感「启动卡死」）。
+        if timeout is None:
+            connect = float(os.environ.get("MYCLASH_TUI_API_CONNECT_TIMEOUT", "1.25"))
+            read = float(os.environ.get("MYCLASH_TUI_API_READ_TIMEOUT", "4"))
+            timeout = (connect, read)
         r = requests.get(
             f"{self.base_url}{path}",
             headers=self._headers(),
@@ -45,11 +55,13 @@ class ClashClient:
         return normalize_runtime_config(raw)
 
     def patch_configs(self, payload: dict[str, Any]) -> None:
+        connect = float(os.environ.get("MYCLASH_TUI_API_CONNECT_TIMEOUT", "1.25"))
+        read = float(os.environ.get("MYCLASH_TUI_API_PATCH_READ_TIMEOUT", "10"))
         r = requests.patch(
             f"{self.base_url}/configs",
             headers=self._headers(),
             json=payload,
-            timeout=10,
+            timeout=(connect, read),
         )
         if r.status_code >= 400:
             detail = (r.text or "").strip() or r.reason or str(r.status_code)
@@ -58,21 +70,25 @@ class ClashClient:
 
     def test_delay(self, proxy_name: str, test_url: str, timeout_ms: int):
         encoded_name = quote(proxy_name, safe="")
+        connect = float(os.environ.get("MYCLASH_TUI_API_CONNECT_TIMEOUT", "1.25"))
+        read = max(4.0, timeout_ms / 1000.0 + 1.0)
         response = requests.get(
             f"{self.base_url}/proxies/{encoded_name}/delay",
             params={"url": test_url, "timeout": timeout_ms},
             headers=self._headers(),
-            timeout=max(4, timeout_ms / 1000 + 1),
+            timeout=(connect, read),
         )
         response.raise_for_status()
         return response.json().get("delay")
 
     def select_proxy(self, group_name: str, proxy_name: str) -> None:
         encoded_group = quote(group_name, safe="")
+        connect = float(os.environ.get("MYCLASH_TUI_API_CONNECT_TIMEOUT", "1.25"))
+        read = float(os.environ.get("MYCLASH_TUI_API_READ_TIMEOUT", "4"))
         response = requests.put(
             f"{self.base_url}/proxies/{encoded_group}",
             json={"name": proxy_name},
             headers=self._headers(),
-            timeout=4,
+            timeout=(connect, read),
         )
         response.raise_for_status()
