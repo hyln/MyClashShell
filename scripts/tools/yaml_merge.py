@@ -13,8 +13,8 @@ config_index = sys.argv[1]
 # print ("Argument List:", str(sys.argv))
 EXEC_DIR = os.getenv('MYCLASH_ROOT_PWD')
 # print(EXEC_DIR)
-raw_configs_stream = open(EXEC_DIR+'/clash/configs/raw_config_{}.yaml'.format(config_index), "r",encoding='utf-8')
-# raw_configs_stream = open(EXEC_DIR+'/clash/configs/config.yaml', "r",encoding='utf-8')
+raw_configs_stream = open(EXEC_DIR+'/mcs/configs/raw_config_{}.yaml'.format(config_index), "r",encoding='utf-8')
+# raw_configs_stream = open(EXEC_DIR+'/mcs/configs/config.yaml', "r",encoding='utf-8')
 
 raw_configs = yaml.safe_load(raw_configs_stream)
 
@@ -52,5 +52,5 @@ for key, value in custom_configs.items():
                 # else:
                 #     raw_configs[key].append(i)
 
-with open(EXEC_DIR+'/clash/configs/config.yaml','w') as yamlfile:
+with open(EXEC_DIR+'/mcs/configs/config.yaml','w') as yamlfile:
     yaml.safe_dump(raw_configs, yamlfile,allow_unicode=True)

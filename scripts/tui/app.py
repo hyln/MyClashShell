@@ -4,25 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import os
-import re
 import signal
-import socket
-import subprocess
 import sys
-import threading
 import time
-import uuid
 from collections import deque
-from pathlib import Path
 from typing import Any, Callable
 
-import requests
 from textual import on
 from textual.actions import SkipAction
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.dom import DOMNode
-from textual.screen import ModalScreen
 from textual.events import Key
 from textual.widget import Widget
 from textual.theme import BUILTIN_THEMES, Theme
@@ -35,26 +27,13 @@ from textual.widgets import (
     Label,
     ListItem,
     ListView,
-    RichLog,
     Select,
     Static,
     Switch,
 )
 
 from scripts.lib.config_runtime import runtime_config_patch_payload
-from scripts.lib.paths import clash_config_yaml, update_proxy_config_script
-from scripts.lib.share import slave_install_hint_lines
-from scripts.lib.subscribe import (
-    is_valid_subscribe_url,
-    load_user_config_dict,
-    normalize_subscribes,
-    save_user_config_dict,
-    set_document_subscribes,
-    user_config_path,
-)
-
 from .client import ClashClient
-from .config_api import _cfg_int
 from .constants import VIEW_IDS
 from .formatting import (
     _fmt_bytes,
@@ -62,115 +41,9 @@ from .formatting import (
     _overview_sparkline_columns,
     _sparkline,
     _truncate,
-    clash_log_searchable,
-    clash_log_to_rich,
-)
-from .lan_constants import lan_config_http_port, lan_udp_port
-from .lan_share import (
-    LanPeer,
-    LanShareHub,
-    fetch_remote_config,
-    pick_lan_host,
-    random_pin3,
-    slave_http_serve_port,
 )
 from .state import TuiState
 from .widgets import ProxyNodeButton, ProxyNodeRows, ProxyNodeScroll, ProxyRightPanel
-
-_ANSI_ESCAPE_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
-_SUB_REFRESH_LOG_MAX_CHARS = 48_000
-
-
-def _strip_ansi(s: str) -> str:
-    return _ANSI_ESCAPE_RE.sub("", s)
-
-
-def _subscribe_refresh_log_text(proc: subprocess.CompletedProcess[str]) -> str:
-    out = (proc.stdout or "").rstrip()
-    err = (proc.stderr or "").rstrip()
-    chunks: list[str] = []
-    if out:
-        chunks.append("stdout:\n" + _strip_ansi(out))
-    if err:
-        chunks.append("stderr:\n" + _strip_ansi(err))
-    if not chunks:
-        return (
-            "（本进程未捕获到 stdout/stderr；若脚本只写文件，请查看仓库根目录 app.log）\n"
-            f"退出码: {proc.returncode}"
-        )
-    text = "\n\n".join(chunks)
-    if len(text) > _SUB_REFRESH_LOG_MAX_CHARS:
-        text = (
-            f"… 输出过长，仅显示末尾 {_SUB_REFRESH_LOG_MAX_CHARS} 字符 …\n\n"
-            + text[-_SUB_REFRESH_LOG_MAX_CHARS:]
-        )
-    return text
-
-
-def _to_bool(value: Any, default: bool) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    s = str(value).strip().lower()
-    if s in {"1", "true", "yes", "on"}:
-        return True
-    if s in {"0", "false", "no", "off"}:
-        return False
-    return default
-
-
-class SubscribeRefreshLogModal(ModalScreen[None]):
-    """展示 update_proxy_config.py 的终端输出。"""
-
-    BINDINGS = [Binding("escape", "dismiss", "关闭")]
-
-    DEFAULT_CSS = """
-    SubscribeRefreshLogModal {
-        align: center middle;
-    }
-    SubscribeRefreshLogModal > #refresh-log-shell {
-        width: 88%;
-        max-width: 120;
-        height: 75%;
-        border: thick $primary;
-        background: $surface;
-        padding: 0 1;
-    }
-    SubscribeRefreshLogModal #refresh-log-scroll {
-        height: 1fr;
-        border: solid $boost;
-        background: $panel;
-        margin: 1 0;
-    }
-    SubscribeRefreshLogModal #refresh-log-body {
-        margin: 1;
-    }
-    """
-
-    def __init__(self, log_text: str, returncode: int) -> None:
-        super().__init__()
-        self._log_text = log_text
-        self._returncode = returncode
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="refresh-log-shell"):
-            rc = self._returncode
-            status = "成功" if rc == 0 else "失败"
-            yield Label(f"update_proxy_config · {status} · 退出码 {rc}")
-            with VerticalScroll(id="refresh-log-scroll"):
-                yield Static(self._log_text, id="refresh-log-body")
-            yield Button("关闭 (Esc)", id="refresh-log-close", variant="primary")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "refresh-log-close":
-            self.dismiss()
-
-    def action_dismiss(self) -> None:
-        self.dismiss()
-
 
 def _atom_one_dark_theme_no_purple() -> Theme:
     """Textual 内置 atom-one-dark 的 accent/secondary 为紫色；与常见编辑器配色不一致，改为金/青。"""
@@ -441,40 +314,6 @@ class ClashTuiApp(App[None]):
         margin-top: 0;
         width: auto;
     }
-    #log-panel {
-        height: 1fr;
-        min-height: 5;
-        border: tall $primary;
-    }
-    #sub-body {
-        height: 1fr;
-        layout: horizontal;
-        min-height: 5;
-    }
-    #sub-names-list {
-        width: 22;
-        height: 1fr;
-        min-height: 5;
-        border: round $boost;
-        background: $panel;
-    }
-    #sub-names-list ListItem {
-        padding: 0 1;
-        height: auto;
-        min-height: 2;
-    }
-    #sub-form-scroll {
-        width: 1fr;
-        height: 1fr;
-    }
-    #sub-actions {
-        layout: horizontal;
-        height: auto;
-        margin-top: 1;
-    }
-    #sub-actions Button {
-        margin-right: 1;
-    }
     """
 
     def _get_dom_base(self) -> DOMNode:
@@ -510,7 +349,6 @@ class ClashTuiApp(App[None]):
         Binding("]", "next_group", "Next group", show=False),
         Binding("u", "sync", "Sync", show=False),
         Binding("escape", "focus_proxy_grid", "Main", show=False),
-        Binding("ctrl+i", "focus_search", "Search", show=False, key_display="ctrl+i"),
         Binding("ctrl+b", "focus_sidebar", "Sidebar", show=False, key_display="ctrl+b"),
     ]
 
@@ -528,20 +366,8 @@ class ClashTuiApp(App[None]):
         self._prev_up = 0
         self._down_hist: deque[float] = deque(maxlen=400)
         self._up_hist: deque[float] = deque(maxlen=400)
-        self._log_filter = ""
-        self._log_stop = threading.Event()
-        self._log_started = False
         self._overview_err = ""
         self._last_runtime_config: dict[str, Any] | None = None
-        self._share_node_id = uuid.uuid4().hex[:10]
-        self._share_pin = random_pin3()
-        self._lan_hub: LanShareHub | None = None
-        self._share_peers: dict[str, LanPeer] = {}
-        self._share_lan_enabled = True
-        self._sub_refresh_busy = False
-        self._sub_subscribes: dict[str, str] = {}
-        self._sub_names_order: list[str] = []
-        self._sub_default_silent = False
         self._proxy_group_sync = False
         self._proxy_lazy_init_done = False
 
@@ -549,12 +375,9 @@ class ClashTuiApp(App[None]):
         with Horizontal(id="root"):
             with Vertical(id="sidebar"):
                 yield ListView(
-                    ListItem(Label("概览")),
-                    ListItem(Label("代理")),
-                    ListItem(Label("配置")),
-                    ListItem(Label("订阅")),
-                    ListItem(Label("共享")),
-                    ListItem(Label("日志")),
+                    ListItem(Label("Overview")),
+                    ListItem(Label("Proxies")),
+                    ListItem(Label("Config")),
                     id="sidebar-nav",
                     classes="sidebar-list",
                     initial_index=0,
@@ -562,30 +385,30 @@ class ClashTuiApp(App[None]):
             with Vertical(id="main"):
                 with ContentSwitcher(id="main-views", initial="view-overview"):
                     with Vertical(id="view-overview", classes="view-pane"):
-                        yield Static("概览", classes="page-title")
+                        yield Static("Overview", classes="page-title")
                         with Horizontal(classes="stat-row"):
                             with Vertical(classes="stat-card"):
-                                yield Static("上传", classes="stat-label")
+                                yield Static("Upload", classes="stat-label")
                                 yield Static("—", id="ov-ul", classes="stat-value")
                             with Vertical(classes="stat-card"):
-                                yield Static("下载", classes="stat-label")
+                                yield Static("Download", classes="stat-label")
                                 yield Static("—", id="ov-dl", classes="stat-value")
                             with Vertical(classes="stat-card"):
-                                yield Static("上传总量", classes="stat-label")
+                                yield Static("Upload total", classes="stat-label")
                                 yield Static("—", id="ov-ut", classes="stat-value")
                             with Vertical(classes="stat-card"):
-                                yield Static("下载总量", classes="stat-label")
+                                yield Static("Download total", classes="stat-label")
                                 yield Static("—", id="ov-dt", classes="stat-value")
                             with Vertical(classes="stat-card"):
-                                yield Static("活动连接", classes="stat-label")
+                                yield Static("Active conns", classes="stat-label")
                                 yield Static("—", id="ov-nb", classes="stat-value")
                         with Vertical(id="overview-charts"):
-                            yield Static("下载速率", classes="overview-chart-title")
+                            yield Static("Download rate", classes="overview-chart-title")
                             yield Static("", id="overview-chart-dl", classes="overview-spark", markup=False)
-                            yield Static("上传速率", classes="overview-chart-title")
+                            yield Static("Upload rate", classes="overview-chart-title")
                             yield Static("", id="overview-chart-ul", classes="overview-spark", markup=False)
                     with Vertical(id="view-proxies", classes="view-pane"):
-                        yield Static("代理", classes="page-title")
+                        yield Static("Proxies", classes="page-title")
                         yield Static(id="group-line", markup=False)
                         with Horizontal(id="proxy-split"):
                             yield ListView(id="proxy-group-list")
@@ -607,38 +430,21 @@ class ClashTuiApp(App[None]):
                                     )
                     with Vertical(id="view-config", classes="view-pane"):
                         with Horizontal(classes="page-header"):
-                            yield Static("配置", classes="page-title")
+                            yield Static("Config", classes="page-title")
                         with Vertical(classes="config-sheet"):
                             yield Static("", id="cfg-api-status", markup=False)
                             with VerticalScroll():
-                                yield Static("端口", classes="config-section-title")
+                                yield Static("Runtime", classes="config-section-title")
                                 with Vertical(classes="config-section"):
                                     with Horizontal(classes="cfg-row"):
-                                        yield Label("HTTP 端口", classes="cfg-label")
-                                        yield Input("0", id="cfg-port", placeholder="port")
-                                    with Horizontal(classes="cfg-row"):
-                                        yield Label("SOCKS5", classes="cfg-label")
-                                        yield Input("0", id="cfg-socks", placeholder="socks-port")
-                                    with Horizontal(classes="cfg-row"):
-                                        yield Label("Mixed", classes="cfg-label")
-                                        yield Input("7890", id="cfg-mixed", placeholder="mixed-port")
-                                    with Horizontal(classes="cfg-row"):
-                                        yield Label("Redir", classes="cfg-label")
-                                        yield Input("0", id="cfg-redir", placeholder="redir-port")
-                                    with Horizontal(classes="cfg-row"):
-                                        yield Label("TProxy", classes="cfg-label")
-                                        yield Input("0", id="cfg-tproxy", placeholder="tproxy-port")
-                                yield Static("运行", classes="config-section-title")
-                                with Vertical(classes="config-section"):
-                                    with Horizontal(classes="cfg-row"):
-                                        yield Label("模式", classes="cfg-label")
+                                        yield Label("Mode", classes="cfg-label")
                                         yield Select(
                                             [("Rule", "rule"), ("Global", "global"), ("Direct", "direct")],
                                             id="cfg-mode",
                                             allow_blank=False,
                                         )
                                     with Horizontal(classes="cfg-row"):
-                                        yield Label("日志级别", classes="cfg-label")
+                                        yield Label("Log level", classes="cfg-label")
                                         yield Select(
                                             [
                                                 ("Debug", "debug"),
@@ -651,80 +457,15 @@ class ClashTuiApp(App[None]):
                                             allow_blank=False,
                                         )
                                     with Horizontal(classes="cfg-row"):
-                                        yield Label("允许局域网", classes="cfg-label")
+                                        yield Label("Allow LAN", classes="cfg-label")
                                         yield Switch(value=False, id="cfg-lan")
                                     with Horizontal(classes="cfg-row"):
                                         yield Label("IPv6", classes="cfg-label")
                                         yield Switch(value=False, id="cfg-ipv6")
                                     with Horizontal(classes="cfg-row"):
-                                        yield Label("绑定地址", classes="cfg-label")
+                                        yield Label("Bind address", classes="cfg-label")
                                         yield Static("—", id="cfg-bind", markup=False)
-                                yield Button("应用到内核 (PATCH /configs)", id="cfg-apply", variant="primary")
-                    with Vertical(id="view-subscribe", classes="view-pane"):
-                        yield Static("订阅", classes="page-title")
-                        yield Static("", id="sub-status", markup=False)
-                        with Vertical(classes="config-sheet"):
-                            with Horizontal(id="sub-body"):
-                                yield ListView(id="sub-names-list")
-                                with VerticalScroll(id="sub-form-scroll"):
-                                    yield Static("订阅链接", classes="config-section-title")
-                                    with Horizontal(classes="cfg-row"):
-                                        yield Label("URL", classes="cfg-label")
-                                        yield Input(placeholder="https://…", id="sub-url")
-                                    yield Static("添加订阅", classes="config-section-title")
-                                    with Horizontal(classes="cfg-row"):
-                                        yield Label("名称", classes="cfg-label")
-                                        yield Input(placeholder="新订阅名称", id="sub-new-name")
-                                    yield Static("默认订阅", classes="config-section-title")
-                                    with Horizontal(classes="cfg-row"):
-                                        yield Label("default", classes="cfg-label")
-                                        yield Select(
-                                            [("DEFAULT", "DEFAULT")],
-                                            id="sub-default",
-                                            allow_blank=False,
-                                        )
-                                    with Horizontal(id="sub-actions"):
-                                        yield Button("添加", id="sub-add-btn", variant="primary")
-                                        yield Button("保存修改", id="sub-save-btn")
-                                        yield Button("删除", id="sub-del-btn", variant="error")
-                                        yield Button("刷新订阅", id="sub-refresh-btn", variant="warning")
-                    with Vertical(id="view-share", classes="view-pane"):
-                        yield Static("共享", classes="page-title")
-                        yield Static("", id="share-lan-status", markup=False)
-                        with Horizontal(classes="cfg-row"):
-                            yield Label("局域网发现", classes="cfg-label")
-                            yield Switch(value=False, id="share-lan-switch")
-                        with Horizontal(classes="cfg-row"):
-                            yield Button("配置 Master-Master", id="share-tab-mm", variant="primary")
-                            yield Button("代理 Master-Slave", id="share-tab-ms")
-                        with ContentSwitcher(id="share-sub", initial="share-mm"):
-                            with Vertical(id="share-mm", classes="view-pane"):
-                                yield Static("本机 PIN（他机拉取你的 config 时需输入）", classes="config-section-title")
-                                yield Static("000", id="share-pin-display", classes="stat-value")
-                                yield Button("刷新 PIN", id="share-pin-refresh", variant="default")
-                                with Horizontal(classes="cfg-row"):
-                                    yield Label("提供配置拉取", classes="cfg-label")
-                                    yield Switch(value=True, id="share-offer-config")
-                                yield Static("其它主机", classes="config-section-title")
-                                yield Select([], id="share-peer-select", allow_blank=True)
-                                yield Input(placeholder="对方屏幕上显示的 PIN", id="share-pull-pin", password=True)
-                                yield Button("拉取选中主机 config.yaml", id="share-pull-btn", variant="warning")
-                                yield Static("手动拉取（自动发现不可用，例如部分热点）", classes="config-section-title")
-                                with Horizontal(classes="cfg-row"):
-                                    yield Label("对方 IP", classes="cfg-label")
-                                    yield Input(placeholder="192.168.x.x", id="share-manual-ip")
-                                with Horizontal(classes="cfg-row"):
-                                    yield Label("config 端口", classes="cfg-label")
-                                    yield Input(str(lan_config_http_port()), id="share-manual-config-port")
-                                yield Button("按 IP 拉取 config", id="share-manual-pull-btn", variant="warning")
-                            with Vertical(id="share-ms", classes="view-pane"):
-                                yield Static("在 Slave 上执行（需 root）", classes="config-section-title")
-                                yield RichLog(id="share-slave-cmd", max_lines=30, auto_scroll=True, markup=False)
-                    with Vertical(id="view-logs", classes="view-pane"):
-                        with Horizontal(classes="page-header"):
-                            yield Static("日志", classes="page-title")
-                            yield Input(placeholder="过滤日志…", id="logs-filter")
-                        yield RichLog(id="log-panel", max_lines=5000, auto_scroll=True, markup=False)
+                                yield Button("Apply to runtime (PATCH /configs)", id="cfg-apply", variant="primary")
                 yield Static(id="status-line", markup=False)
         yield Footer()
 
@@ -735,7 +476,7 @@ class ClashTuiApp(App[None]):
             return None
 
     def _safe_call_from_thread(self, callback: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
-        """测速/日志等后台线程可能在 App 退出后才结束，避免 call_from_thread 抛错。"""
+        """测速等后台线程可能在 App 退出后才结束，避免 call_from_thread 抛错。"""
         try:
             self.call_from_thread(callback, *args, **kwargs)
         except RuntimeError as exc:
@@ -755,7 +496,7 @@ class ClashTuiApp(App[None]):
             self.set_interval(float(self._auto_refresh_s), self._on_auto_timer)
         nav = self.query_one("#sidebar-nav", ListView)
         self._apply_sidebar_index(nav.index if nav.index is not None else 0)
-        # 首次拉 /proxies、读 user_config、起 LAN 线程放在 worker，避免阻塞首帧（内核未起或 API 慢时尤其明显）。
+        # 首次拉 /proxies 放在 worker，避免阻塞首帧（内核未起或 API 慢时尤其明显）。
         self.run_worker(
             self._bootstrap_after_mount_async(),
             group="tui-bootstrap",
@@ -769,15 +510,9 @@ class ClashTuiApp(App[None]):
         except Exception as exc:
             self._state.last_error = str(exc)
         await self._rebuild_group_list_async()
-        self._load_share_settings_from_yaml()
-        self._sync_lan_hub()
 
     def on_unmount(self) -> None:
-        self._log_stop.set()
         self._state._abort_delay_test.set()
-        if self._lan_hub:
-            self._lan_hub.stop()
-            self._lan_hub = None
 
     def action_help_quit(self) -> None:
         """Ctrl+C 字符路径（与 SIGINT 二选一或同时）：直接退出。"""
@@ -807,17 +542,7 @@ class ClashTuiApp(App[None]):
             elif vid == "view-proxies":
                 self.query_one("#proxy-group-list", ListView).focus()
             elif vid == "view-config":
-                self.query_one("#cfg-port", Input).focus()
-            elif vid == "view-subscribe":
-                lv = self.query_one("#sub-names-list", ListView)
-                if lv.children and lv.index is not None:
-                    lv.focus()
-                else:
-                    self.query_one("#sub-url", Input).focus()
-            elif vid == "view-share":
-                self.query_one("#share-lan-switch", Switch).focus()
-            elif vid == "view-logs":
-                self.query_one("#logs-filter", Input).focus()
+                self.query_one("#cfg-mode", Select).focus()
         except Exception:
             pass
 
@@ -865,17 +590,6 @@ class ClashTuiApp(App[None]):
                 exclusive=True,
                 exit_on_error=False,
             )
-        elif vid == "view-subscribe":
-            self.run_worker(
-                self._load_subscribe_async(),
-                group="subscribe",
-                exclusive=True,
-                exit_on_error=False,
-            )
-        elif vid == "view-share":
-            self._update_share_pin_display()
-            self._update_slave_cmd_text()
-            self._refresh_share_peer_list()
         elif vid == "view-proxies":
             self.run_worker(
                 self._ensure_proxy_grid_async(),
@@ -883,53 +597,6 @@ class ClashTuiApp(App[None]):
                 exclusive=True,
                 exit_on_error=False,
             )
-        elif vid == "view-logs":
-            self._ensure_log_tail()
-
-    def _ensure_log_tail(self) -> None:
-        if self._log_started:
-            return
-        self._log_started = True
-
-        def worker():
-            while not self._log_stop.is_set():
-                try:
-                    url = f"{self._client.base_url}/logs"
-                    params = {"level": "info"}
-                    # 读超时不能为 None，否则无新日志时会在 read 上挂很久，退出 TUI 会明显卡顿。
-                    with requests.get(
-                        url,
-                        params=params,
-                        headers=self._client._headers(),
-                        stream=True,
-                        timeout=(3, 1),
-                    ) as r:
-                        r.raise_for_status()
-                        for line in r.iter_lines(decode_unicode=True):
-                            if self._log_stop.is_set():
-                                return
-                            if not line:
-                                continue
-                            self._safe_call_from_thread(self._append_log_line, line)
-                except Exception as exc:
-                    if self._log_stop.is_set():
-                        return
-                    self._safe_call_from_thread(
-                        self._append_log_line, f"[log stream error] {exc} (retrying…)"
-                    )
-                    if self._log_stop.wait(timeout=0.5):
-                        return
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _append_log_line(self, line: str) -> None:
-        searchable = clash_log_searchable(line)
-        if self._log_filter and self._log_filter.lower() not in searchable.lower():
-            return
-        try:
-            self.query_one("#log-panel", RichLog).write(clash_log_to_rich(line))
-        except Exception:
-            pass
 
     def _tick_overview(self) -> None:
         try:
@@ -978,11 +645,6 @@ class ClashTuiApp(App[None]):
     def _apply_config_form_from_dict(self, cfg: dict[str, Any], *, status_msg: str | None = None) -> None:
         """把 GET /configs 的扁平字段填回表单，并可选更新顶栏说明。"""
         self._last_runtime_config = dict(cfg)
-        self.query_one("#cfg-port", Input).value = str(_cfg_int(cfg.get("port")))
-        self.query_one("#cfg-socks", Input).value = str(_cfg_int(cfg.get("socks-port")))
-        self.query_one("#cfg-mixed", Input).value = str(_cfg_int(cfg.get("mixed-port")))
-        self.query_one("#cfg-redir", Input).value = str(_cfg_int(cfg.get("redir-port")))
-        self.query_one("#cfg-tproxy", Input).value = str(_cfg_int(cfg.get("tproxy-port")))
         bind = cfg.get("bind-address") or cfg.get("bind_address")
         bind_s = str(bind) if bind not in (None, "") else "—"
         self.query_one("#cfg-bind", Static).update(bind_s)
@@ -991,13 +653,13 @@ class ClashTuiApp(App[None]):
         try:
             mode_w.value = mode
         except Exception as exc:
-            self.notify(f"模式值 {mode!r} 与选项不匹配: {exc}", severity="warning", timeout=4)
+            self.notify(f"Mode {mode!r} does not match options: {exc}", severity="warning", timeout=4)
         logl = str(cfg.get("log-level", cfg.get("log_level", "info"))).lower()
         log_w = self.query_one("#cfg-loglevel", Select)
         try:
             log_w.value = logl
         except Exception as exc:
-            self.notify(f"日志级别 {logl!r} 与选项不匹配: {exc}", severity="warning", timeout=4)
+            self.notify(f"Log level {logl!r} does not match options: {exc}", severity="warning", timeout=4)
         self.query_one("#cfg-lan", Switch).value = bool(cfg.get("allow-lan", cfg.get("allow_lan", False)))
         self.query_one("#cfg-ipv6", Switch).value = bool(cfg.get("ipv6", False))
         if status_msg is not None:
@@ -1008,14 +670,11 @@ class ClashTuiApp(App[None]):
         try:
             cfg = await asyncio.to_thread(self._client.get_configs)
         except Exception as exc:
-            self.notify(f"读取配置失败: {exc}", severity="error", timeout=4)
+            self.notify(f"Failed to load config: {exc}", severity="error", timeout=4)
             return
 
         api = self._client.base_url
-        msg = (
-            f"已从 GET {api}/configs 加载  ·  mode={cfg.get('mode')}  "
-            f"mixed-port={cfg.get('mixed-port')}"
-        )
+        msg = f"Loaded GET {api}/configs  ·  mode={cfg.get('mode')}"
         self._apply_config_form_from_dict(cfg, status_msg=msg)
 
     @staticmethod
@@ -1031,11 +690,6 @@ class ClashTuiApp(App[None]):
     @on(Button.Pressed, "#cfg-apply")
     async def apply_config(self) -> None:
         try:
-            port = int(self.query_one("#cfg-port", Input).value or 0)
-            socks = int(self.query_one("#cfg-socks", Input).value or 0)
-            mixed = int(self.query_one("#cfg-mixed", Input).value or 0)
-            redir = int(self.query_one("#cfg-redir", Input).value or 0)
-            tproxy = int(self.query_one("#cfg-tproxy", Input).value or 0)
             last = self._last_runtime_config or {}
             mode = self._select_runtime_value(
                 self.query_one("#cfg-mode", Select), last, "mode", default="rule"
@@ -1050,11 +704,6 @@ class ClashTuiApp(App[None]):
             lan = self.query_one("#cfg-lan", Switch).value
             ipv6 = self.query_one("#cfg-ipv6", Switch).value
             payload = runtime_config_patch_payload(
-                port=port,
-                socks_port=socks,
-                mixed_port=mixed,
-                redir_port=redir,
-                tproxy_port=tproxy,
                 mode=mode,
                 log_level=logl,
                 allow_lan=bool(lan),
@@ -1063,307 +712,14 @@ class ClashTuiApp(App[None]):
             self._client.patch_configs(payload)
             cfg2 = self._client.get_configs()
         except Exception as exc:
-            self.notify(f"应用失败: {exc}", severity="error", timeout=5)
+            self.notify(f"Apply failed: {exc}", severity="error", timeout=5)
             return
         api = self._client.base_url
         self._apply_config_form_from_dict(
             cfg2,
-            status_msg=f"已 PATCH {api}/configs 并重新读取",
+            status_msg=f"Patched {api}/configs and reloaded",
         )
-        self.notify("已写入内核并刷新表单", severity="information", timeout=3)
-
-    def _set_sub_controls_enabled(self, enabled: bool) -> None:
-        d = not enabled
-        for wid in (
-            "sub-url",
-            "sub-new-name",
-            "sub-default",
-            "sub-add-btn",
-            "sub-save-btn",
-            "sub-del-btn",
-            "sub-refresh-btn",
-        ):
-            try:
-                self.query_one(f"#{wid}").disabled = d
-            except Exception:
-                pass
-        try:
-            self.query_one("#sub-names-list", ListView).disabled = d
-        except Exception:
-            pass
-
-    def _sub_key_order_for_persist(self) -> list[str]:
-        """与 user_config 中 subscribes 块顺序一致；DEFAULT=文档中第一个订阅（见 update_proxy_config）。"""
-        seen: set[str] = set()
-        out: list[str] = []
-        for k in self._sub_names_order:
-            if k in self._sub_subscribes and k not in seen:
-                out.append(k)
-                seen.add(k)
-        for k in self._sub_subscribes:
-            if k not in seen:
-                out.append(k)
-                seen.add(k)
-        return out
-
-    def _persist_subscribe_yaml(self) -> None:
-        p = user_config_path()
-        if not p:
-            raise RuntimeError("MYCLASH_ROOT_PWD 未设置")
-        data = load_user_config_dict(p)
-        order = self._sub_key_order_for_persist()
-        set_document_subscribes(data, {k: self._sub_subscribes[k] for k in order}, key_order=order)
-        sel_w = self.query_one("#sub-default", Select)
-        val = sel_w.value
-        if val is Select.NULL or val is None:
-            val = data.get("default_subscribe", "DEFAULT")
-        data["default_subscribe"] = str(val)
-        save_user_config_dict(p, data)
-
-    async def _apply_sub_default_select(self, default_s: str) -> None:
-        opts = [("DEFAULT", "DEFAULT")]
-        for n in self._sub_names_order:
-            opts.append((n, n))
-        sel = self.query_one("#sub-default", Select)
-        self._sub_default_silent = True
-        sel.set_options(opts)
-        valid = {v for _, v in opts}
-        val = default_s if default_s in valid else "DEFAULT"
-        try:
-            sel.value = val
-        except Exception:
-            sel.value = "DEFAULT"
-        self._sub_default_silent = False
-
-    async def _rebuild_sub_name_list(self) -> None:
-        lv = self.query_one("#sub-names-list", ListView)
-        await lv.remove_children()
-        for name in self._sub_names_order:
-            await lv.mount(ListItem(Label(name)))
-        if self._sub_names_order:
-            lv.index = 0
-            self.query_one("#sub-url", Input).value = self._sub_subscribes[self._sub_names_order[0]]
-        else:
-            try:
-                lv.index = None
-            except Exception:
-                pass
-            self.query_one("#sub-url", Input).value = ""
-
-    async def _load_subscribe_async(self) -> None:
-        p = user_config_path()
-        if not p:
-            self.query_one("#sub-status", Static).update(
-                "未设置 MYCLASH_ROOT_PWD，无法编辑 user_config.yaml"
-            )
-            self._set_sub_controls_enabled(False)
-            return
-        if not p.exists():
-            self.query_one("#sub-status", Static).update(f"文件不存在: {p}")
-            self._set_sub_controls_enabled(False)
-            return
-        try:
-            data = await asyncio.to_thread(load_user_config_dict, p)
-        except Exception as exc:
-            self.notify(f"读取 user_config 失败: {exc}", severity="error", timeout=5)
-            self._set_sub_controls_enabled(False)
-            return
-        self._sub_subscribes = normalize_subscribes(data.get("subscribes"))
-        self._sub_names_order = list(self._sub_subscribes.keys())
-        dft = data.get("default_subscribe")
-        default_s = str(dft).strip() if dft is not None else "DEFAULT"
-        self.query_one("#sub-status", Static).update(str(p))
-        self._set_sub_controls_enabled(True)
-        await self._rebuild_sub_name_list()
-        await self._apply_sub_default_select(default_s)
-
-    @on(ListView.Highlighted, "#sub-names-list")
-    def sub_names_highlighted(self, event: ListView.Highlighted) -> None:
-        if self._current_view() != "view-subscribe":
-            return
-        idx = event.list_view.index
-        if idx is None or not (0 <= idx < len(self._sub_names_order)):
-            return
-        name = self._sub_names_order[idx]
-        self.query_one("#sub-url", Input).value = self._sub_subscribes.get(name, "")
-
-    @on(Select.Changed, "#sub-default")
-    def sub_default_changed(self, event: Select.Changed) -> None:
-        if self._sub_default_silent or self._current_view() != "view-subscribe":
-            return
-        try:
-            self._persist_subscribe_yaml()
-        except Exception as exc:
-            self.notify(f"保存默认订阅失败: {exc}", severity="error", timeout=4)
-            return
-        self.notify("已保存默认订阅", severity="information", timeout=2)
-
-    @on(Button.Pressed, "#sub-save-btn")
-    async def sub_save_pressed(self) -> None:
-        if self._current_view() != "view-subscribe":
-            return
-        lv = self.query_one("#sub-names-list", ListView)
-        idx = lv.index
-        if idx is None or not (0 <= idx < len(self._sub_names_order)):
-            self.notify("请先选择一个订阅", severity="warning", timeout=3)
-            return
-        name = self._sub_names_order[idx]
-        url = self.query_one("#sub-url", Input).value.strip()
-        if not is_valid_subscribe_url(url):
-            self.notify("URL 无效（需 http/https/ftp）", severity="error", timeout=4)
-            return
-        self._sub_subscribes[name] = url
-        try:
-            self._persist_subscribe_yaml()
-        except Exception as exc:
-            self.notify(f"保存失败: {exc}", severity="error", timeout=5)
-            return
-        self.notify(f"已保存「{name}」", severity="information", timeout=2)
-
-    @on(Button.Pressed, "#sub-add-btn")
-    async def sub_add_pressed(self) -> None:
-        if self._current_view() != "view-subscribe":
-            return
-        name = self.query_one("#sub-new-name", Input).value.strip()
-        url = self.query_one("#sub-url", Input).value.strip()
-        if not name:
-            self.notify("请填写新订阅名称", severity="warning", timeout=3)
-            return
-        if name in self._sub_subscribes:
-            self.notify("该名称已存在", severity="warning", timeout=3)
-            return
-        if not is_valid_subscribe_url(url):
-            self.notify("URL 无效（需 http/https/ftp）", severity="error", timeout=4)
-            return
-        sel = self.query_one("#sub-default", Select)
-        prev_def = str(sel.value) if sel.value not in (Select.NULL, None) else "DEFAULT"
-        self._sub_subscribes[name] = url
-        prev_order = list(self._sub_names_order)
-        self._sub_names_order.append(name)
-        try:
-            self._persist_subscribe_yaml()
-        except Exception as exc:
-            del self._sub_subscribes[name]
-            self._sub_names_order = prev_order
-            self.notify(f"保存失败: {exc}", severity="error", timeout=5)
-            return
-        await self._rebuild_sub_name_list()
-        new_idx = self._sub_names_order.index(name)
-        lv = self.query_one("#sub-names-list", ListView)
-        lv.index = new_idx
-        self.query_one("#sub-url", Input).value = self._sub_subscribes[name]
-        self.query_one("#sub-new-name", Input).value = ""
-        await self._apply_sub_default_select(prev_def)
-        self.notify(f"已添加「{name}」", severity="information", timeout=2)
-
-    @on(Button.Pressed, "#sub-del-btn")
-    async def sub_del_pressed(self) -> None:
-        if self._current_view() != "view-subscribe":
-            return
-        lv = self.query_one("#sub-names-list", ListView)
-        idx = lv.index
-        if idx is None or not (0 <= idx < len(self._sub_names_order)):
-            self.notify("请先选择一个订阅", severity="warning", timeout=3)
-            return
-        name = self._sub_names_order[idx]
-        sel = self.query_one("#sub-default", Select)
-        cur_def = (
-            str(sel.value)
-            if sel.value not in (Select.NULL, None)
-            else "DEFAULT"
-        )
-        if cur_def == name:
-            cur_def = "DEFAULT"
-        del self._sub_subscribes[name]
-        self._sub_names_order = [k for k in self._sub_names_order if k != name]
-        await self._rebuild_sub_name_list()
-        await self._apply_sub_default_select(cur_def)
-        try:
-            self._persist_subscribe_yaml()
-        except Exception as exc:
-            self.notify(f"保存失败: {exc}", severity="error", timeout=5)
-            return
-        self.notify(f"已删除「{name}」", severity="information", timeout=2)
-
-    @on(Button.Pressed, "#sub-refresh-btn")
-    async def sub_refresh_pressed(self) -> None:
-        if self._current_view() != "view-subscribe":
-            return
-        root = os.environ.get("MYCLASH_ROOT_PWD", "").strip()
-        if not root or self._sub_refresh_busy:
-            return
-        py = Path(root) / "venv" / "bin" / "python3"
-        script = update_proxy_config_script(Path(root))
-        if not py.is_file() or not script.is_file():
-            self.notify(
-                "未找到 venv/bin/python3 或 scripts/runtime/update_proxy_config.py",
-                severity="error",
-                timeout=5,
-            )
-            return
-        self._sub_refresh_busy = True
-        try:
-            self.query_one("#sub-refresh-btn", Button).disabled = True
-        except Exception:
-            pass
-        self.run_worker(
-            self._subscribe_refresh_worker(root, py, script),
-            group="subscribe-refresh",
-            exclusive=True,
-            exit_on_error=False,
-        )
-
-    async def _subscribe_refresh_worker(
-        self, root: str, py: Path, script: Path
-    ) -> None:
-        """在 worker 内跑子进程与 push_screen_wait（Textual 要求 wait_for_dismiss 仅能在 worker 中使用）。"""
-        proc: subprocess.CompletedProcess[str] | None = None
-        try:
-            try:
-                proc = await asyncio.to_thread(
-                    subprocess.run,
-                    [str(py), str(script)],
-                    cwd=root,
-                    env={
-                        **os.environ,
-                        "PYTHONUNBUFFERED": "1",
-                        "http_proxy": "",
-                        "https_proxy": "",
-                        "HTTP_PROXY": "",
-                        "HTTPS_PROXY": "",
-                    },
-                    capture_output=True,
-                    text=True,
-                    timeout=120,
-                )
-            except subprocess.TimeoutExpired:
-                self.notify("刷新订阅超时", severity="error", timeout=4)
-            except Exception as exc:
-                self.notify(f"刷新失败: {exc}", severity="error", timeout=5)
-            if proc is None:
-                return
-            log_text = _subscribe_refresh_log_text(proc)
-            await self.push_screen_wait(
-                SubscribeRefreshLogModal(log_text, proc.returncode)
-            )
-            if proc.returncode != 0:
-                return
-            try:
-                self._state.refresh_groups_and_nodes()
-                self._state.last_error = ""
-            except Exception as exc:
-                self._state.last_error = str(exc)
-            await self._rebuild_group_list_async()
-            await self._rebuild_cards_async()
-            self._refresh_card_contents()
-            self._sync_proxy_chrome()
-            self._sync_main_footer()
-        finally:
-            self._sub_refresh_busy = False
-            try:
-                self.query_one("#sub-refresh-btn", Button).disabled = False
-            except Exception:
-                pass
+        self.notify("Applied to runtime; form refreshed", severity="information", timeout=3)
 
     def _on_auto_timer(self) -> None:
         if self._state.testing:
@@ -1455,38 +811,32 @@ class ClashTuiApp(App[None]):
 
     def _sync_proxy_chrome(self) -> None:
         visible = self._state.display_nodes()
-        status = "测速中…" if self._state.testing else "就绪"
+        status = "testing…" if self._state.testing else "ready"
         cur = self._state.current_node
-        cur_part = f"当前 {cur}" if cur else ""
-        parts = [f"{len(visible)} 节点", status]
+        cur_part = f"current {cur}" if cur else ""
+        parts = [f"{len(visible)} nodes", status]
         if cur_part:
             parts.insert(0, cur_part)
-        line = "  ·  ".join(parts)
+        line = "  |  ".join(parts)
         self.query_one("#group-line", Static).update(line)
 
     def _sync_main_footer(self) -> None:
         vid = self._current_view()
         err = self._state.last_error
-        base = "侧栏↑↓换页  Enter/Tab进主区  ctrl+b回侧栏  q退出"
+        base = "sidebar up/down  Enter/Tab main  ctrl+b sidebar  q quit"
         if vid == "view-proxies":
             extra = (
-                "  ·  代理：左栏选组  右kj/↑↓选节点  Tab换栏  Enter切换  r测速  [/]换组  u同步  Esc→右栏"
-                + (f"  ·  {err}" if err else "")
+                "  |  proxies: left groups  right kj/up/down nodes  Tab columns  Enter select  r retest  [/] group  u sync  Esc right"
+                + (f"  |  {err}" if err else "")
             )
         elif vid == "view-overview":
             extra = (
-                f"  ·  {_truncate(self._overview_err, 72)}"
+                f"  |  {_truncate(self._overview_err, 72)}"
                 if self._overview_err
-                else "  ·  概览：连接与流量"
+                else "  |  overview: connections and traffic"
             )
         elif vid == "view-config":
-            extra = "  ·  配置：改后点「应用」写入内核（PATCH /configs）"
-        elif vid == "view-subscribe":
-            extra = "  ·  订阅：按钮写入 user_config.yaml  ·  刷新=下载订阅并合并进内核"
-        elif vid == "view-logs":
-            extra = "  ·  日志：ctrl+i 聚焦过滤框"
-        elif vid == "view-share":
-            extra = "  ·  共享：仅可信局域网；PIN 防误操作"
+            extra = "  |  config: Apply writes runtime (PATCH /configs)"
         else:
             extra = ""
         self.query_one("#status-line", Static).update(base + extra)
@@ -1661,10 +1011,6 @@ class ClashTuiApp(App[None]):
         self._sync_proxy_chrome()
         self._sync_main_footer()
 
-    def action_focus_search(self) -> None:
-        if self._current_view() == "view-logs":
-            self.query_one("#logs-filter", Input).focus()
-
     def action_focus_sidebar(self) -> None:
         self.query_one("#sidebar-nav", ListView).focus()
 
@@ -1694,291 +1040,6 @@ class ClashTuiApp(App[None]):
         self._refresh_card_contents()
         self._sync_proxy_chrome()
         self._sync_main_footer()
-
-    def _get_share_http_port(self) -> int:
-        if self._last_runtime_config:
-            return _cfg_int(self._last_runtime_config.get("port"))
-        return 7890
-
-    def _share_config_path(self) -> Path | None:
-        root = os.environ.get("MYCLASH_ROOT_PWD", "").strip()
-        if not root:
-            return None
-        return clash_config_yaml(Path(root))
-
-    def _load_share_settings_from_yaml(self) -> None:
-        p = user_config_path()
-        if not p or not p.is_file():
-            return
-        try:
-            data = load_user_config_dict(p)
-        except Exception:
-            return
-        raw_share = data.get("share")
-        enabled = True
-        offer = True
-        if isinstance(raw_share, dict):
-            enabled = _to_bool(raw_share.get("enabled"), True)
-            offer = _to_bool(raw_share.get("offer_config"), True)
-        self._share_lan_enabled = enabled
-        try:
-            self.query_one("#share-lan-switch", Switch).value = enabled
-        except Exception:
-            pass
-        try:
-            self.query_one("#share-offer-config", Switch).value = offer
-        except Exception:
-            pass
-
-    def _persist_share_settings_to_yaml(self) -> None:
-        p = user_config_path()
-        if not p:
-            return
-        data = load_user_config_dict(p)
-        raw = data.get("share")
-        if not isinstance(raw, dict):
-            data["share"] = {
-                "enabled": bool(self._share_lan_enabled),
-                "offer_config": bool(self.query_one("#share-offer-config", Switch).value),
-            }
-        else:
-            raw["enabled"] = bool(self._share_lan_enabled)
-            raw["offer_config"] = bool(self.query_one("#share-offer-config", Switch).value)
-        save_user_config_dict(p, data)
-
-    def _update_share_pin_display(self) -> None:
-        try:
-            self.query_one("#share-pin-display", Static).update(self._share_pin)
-        except Exception:
-            pass
-
-    def _update_slave_cmd_text(self) -> None:
-        try:
-            log = self.query_one("#share-slave-cmd", RichLog)
-            log.clear()
-        except Exception:
-            return
-        host = pick_lan_host()
-        port = self._get_share_http_port()
-        serve_port = slave_http_serve_port()
-        root = os.environ.get("MYCLASH_ROOT_PWD", "").strip()
-        if not root:
-            log.write("未设置 MYCLASH_ROOT_PWD，无法生成本仓库脚本路径。")
-            return
-        for line in slave_install_hint_lines(
-            host=host,
-            clash_http_port=port,
-            serve_port=serve_port,
-            repo_root=root,
-        ):
-            log.write(line)
-
-    def _on_lan_peers_from_thread(self, _peers: dict[str, LanPeer]) -> None:
-        self._safe_call_from_thread(self._refresh_share_peer_list)
-
-    def _sync_lan_hub(self) -> None:
-        st = self.query_one("#share-lan-status", Static)
-        cfgp = self._share_config_path()
-        if not cfgp or not cfgp.is_file():
-            st.update("未找到 clash/configs/config.yaml（检查 MYCLASH_ROOT_PWD）")
-            if self._lan_hub:
-                self._lan_hub.stop()
-                self._lan_hub = None
-            return
-        if not self._share_lan_enabled:
-            st.update("局域网发现已关闭")
-            if self._lan_hub:
-                self._lan_hub.stop()
-                self._lan_hub = None
-            return
-        try:
-            offer = self.query_one("#share-offer-config", Switch).value
-        except Exception:
-            offer = True
-        if self._lan_hub:
-            self._lan_hub.stop()
-            self._lan_hub = None
-        self._lan_hub = LanShareHub(
-            node_id=self._share_node_id,
-            get_http_port=self._get_share_http_port,
-            get_config_port=lan_config_http_port,
-            get_display_name=lambda: socket.gethostname(),
-            get_pin=lambda: self._share_pin,
-            config_yaml_path=str(cfgp),
-            on_peers=self._on_lan_peers_from_thread,
-            offer_config=bool(offer),
-        )
-        self._lan_hub.start()
-        offer_note = "提供配置 HTTP 已开" if offer else "仅发现、不提供配置拉取"
-        st.update(
-            f"UDP {lan_udp_port()} 组播 224.0.0.251 · 配置 HTTP {lan_config_http_port()} · {offer_note} · node_id={self._share_node_id}"
-        )
-
-    def _refresh_share_peer_list(self) -> None:
-        try:
-            sel = self.query_one("#share-peer-select", Select)
-        except Exception:
-            return
-        peers = self._lan_hub.snapshot_peers() if self._lan_hub else {}
-        # 发现包会持续到达，刷新下拉框时保留现有选中值，避免“刚选中就被重置”。
-        prev = None if sel.is_blank() else sel.value
-        order = sorted(
-            (p for p in peers.values() if p.node_id != self._share_node_id),
-            key=lambda p: (p.name, p.node_id),
-        )
-        opts = [
-            (f"{p.name}  {p.host}:{p.http_port} cfg:{p.config_port}  [{p.node_id}]", p.node_id)
-            for p in order
-        ]
-        try:
-            sel.set_options(opts)
-            valid = {p.node_id for p in order}
-            if prev is not None and prev in valid:
-                sel.value = prev
-        except Exception:
-            pass
-
-    @on(Switch.Changed, "#share-lan-switch")
-    def share_lan_changed(self, event: Switch.Changed) -> None:
-        self._share_lan_enabled = bool(event.value)
-        try:
-            self._persist_share_settings_to_yaml()
-        except Exception:
-            pass
-        self._sync_lan_hub()
-        self._refresh_share_peer_list()
-
-    @on(Switch.Changed, "#share-offer-config")
-    def share_offer_changed(self, event: Switch.Changed) -> None:
-        try:
-            self._persist_share_settings_to_yaml()
-        except Exception:
-            pass
-        if self._share_lan_enabled:
-            self._sync_lan_hub()
-
-    @on(Button.Pressed, "#share-tab-mm")
-    def share_tab_mm(self) -> None:
-        self.query_one("#share-sub", ContentSwitcher).current = "share-mm"
-
-    @on(Button.Pressed, "#share-tab-ms")
-    def share_tab_ms(self) -> None:
-        self.query_one("#share-sub", ContentSwitcher).current = "share-ms"
-        self._update_slave_cmd_text()
-
-    @on(Button.Pressed, "#share-pin-refresh")
-    def share_pin_refresh(self) -> None:
-        self._share_pin = random_pin3()
-        self._update_share_pin_display()
-        if self._share_lan_enabled:
-            self._sync_lan_hub()
-
-    @on(Button.Pressed, "#share-pull-btn")
-    def share_pull_pressed(self) -> None:
-        self.run_worker(self._share_pull_worker(), exclusive=True, exit_on_error=False)
-
-    async def _share_pull_worker(self) -> None:
-        try:
-            sel = self.query_one("#share-peer-select", Select)
-            nid = sel.value
-        except Exception:
-            self.notify("无法读取列表", severity="error")
-            return
-        if sel.is_blank():
-            self.notify("请先在下拉框选择一台主机", severity="warning")
-            return
-        if nid == self._share_node_id:
-            self.notify("不能拉取本机", severity="warning")
-            return
-        pin = self.query_one("#share-pull-pin", Input).value.strip()
-        if len(pin) != 3 or not pin.isdigit():
-            self.notify("请输入对方屏幕上显示的 3 位 PIN", severity="warning")
-            return
-        cfgp = self._share_config_path()
-        if not cfgp:
-            self.notify("MYCLASH_ROOT_PWD 未设置", severity="error")
-            return
-        peers = self._lan_hub.snapshot_peers() if self._lan_hub else {}
-        peer = peers.get(nid)
-        if not peer:
-            self.notify("未找到该主机信息", severity="error")
-            return
-        loop = asyncio.get_running_loop()
-        self.notify("正在拉取配置…", timeout=2)
-        try:
-            h, cp, pn = peer.host, peer.config_port, pin
-            raw = await loop.run_in_executor(
-                None,
-                lambda h=h, cp=cp, pn=pn: fetch_remote_config(h, cp, pn),
-            )
-        except Exception as exc:
-            self.notify(f"拉取失败: {exc}", severity="error", timeout=6)
-            return
-        backup = cfgp.parent / f"{cfgp.name}.bak.{int(time.time())}"
-        try:
-            if cfgp.is_file():
-                backup.write_bytes(cfgp.read_bytes())
-            cfgp.write_bytes(raw)
-        except OSError as exc:
-            self.notify(f"写入失败: {exc}", severity="error", timeout=6)
-            return
-        self.notify(
-            f"已写入 {cfgp}，备份 {backup.name}。请执行: sudo systemctl restart myclash",
-            severity="information",
-            timeout=8,
-        )
-
-    @on(Button.Pressed, "#share-manual-pull-btn")
-    def share_manual_pull_pressed(self) -> None:
-        self.run_worker(self._share_manual_pull_worker(), exclusive=True, exit_on_error=False)
-
-    async def _share_manual_pull_worker(self) -> None:
-        host = self.query_one("#share-manual-ip", Input).value.strip()
-        port_s = self.query_one("#share-manual-config-port", Input).value.strip()
-        pin = self.query_one("#share-pull-pin", Input).value.strip()
-        if not host:
-            self.notify("请填写对方 IP", severity="warning")
-            return
-        try:
-            cport = int(port_s) if port_s else lan_config_http_port()
-        except ValueError:
-            self.notify("config 端口无效", severity="warning")
-            return
-        if len(pin) != 3 or not pin.isdigit():
-            self.notify("请输入对方屏幕上显示的 3 位 PIN", severity="warning")
-            return
-        cfgp = self._share_config_path()
-        if not cfgp:
-            self.notify("MYCLASH_ROOT_PWD 未设置", severity="error")
-            return
-        loop = asyncio.get_running_loop()
-        self.notify("正在拉取配置…", timeout=2)
-        try:
-            h, cp, pn = host, cport, pin
-            raw = await loop.run_in_executor(
-                None,
-                lambda h=h, cp=cp, pn=pn: fetch_remote_config(h, cp, pn),
-            )
-        except Exception as exc:
-            self.notify(f"拉取失败: {exc}", severity="error", timeout=6)
-            return
-        backup = cfgp.parent / f"{cfgp.name}.bak.{int(time.time())}"
-        try:
-            if cfgp.is_file():
-                backup.write_bytes(cfgp.read_bytes())
-            cfgp.write_bytes(raw)
-        except OSError as exc:
-            self.notify(f"写入失败: {exc}", severity="error", timeout=6)
-            return
-        self.notify(
-            f"已写入 {cfgp}，备份 {backup.name}。请执行: sudo systemctl restart myclash",
-            severity="information",
-            timeout=8,
-        )
-
-    @on(Input.Changed, "#logs-filter")
-    def filter_logs(self, event: Input.Changed) -> None:
-        self._log_filter = event.value.strip()
 
 
 def main() -> None:

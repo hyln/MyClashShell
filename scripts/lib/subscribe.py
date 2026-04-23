@@ -1,6 +1,6 @@
-"""Load/save user_config.yaml subscription fields (subscribes, default_subscribe).
+"""Load/save user_config.yaml 中的 subscribes / default_subscribe。
 
-Uses ruamel.yaml round-trip mode so comments and layout are preserved when possible.
+subscribes 每项必须为映射 ``{ url, backend }``，``backend`` 为 ``clash`` 或 ``v2ray``（不再支持旧版「值直接为 URL 字符串」）。
 """
 
 from __future__ import annotations
@@ -49,28 +49,51 @@ def load_user_config_dict(path: Path) -> MutableMapping[str, Any]:
     return data
 
 
-def normalize_subscribes(raw: Any) -> dict[str, str]:
-    """Map name -> URL. Key order follows ``raw.items()`` (YAML / ruamel 中的书写顺序)。"""
+def parse_subscribes(raw: Any) -> dict[str, dict[str, str]]:
+    """解析 subscribes：name -> { url, backend }。顺序与 YAML 中键顺序一致（Python 3.7+ dict 保序）。"""
     if not isinstance(raw, MutableMapping):
         return {}
-    out: dict[str, str] = {}
+    out: dict[str, dict[str, str]] = {}
     for k, v in raw.items():
-        if v is None:
+        name = str(k).strip()
+        if not name:
             continue
-        out[str(k).strip()] = str(v).strip()
+        if not isinstance(v, dict):
+            raise ValueError(
+                f'subscribes["{name}"] 须为 {{ url, backend }} 映射（clash|v2ray），不再支持旧版「值为 URL 字符串」'
+            )
+        url_s = str(v.get("url") or "").strip()
+        be = str(v.get("backend") or "").strip().lower()
+        if be not in ("clash", "v2ray"):
+            raise ValueError(f'subscribes["{name}"].backend 须为 clash 或 v2ray，当前: {v.get("backend")!r}')
+        if be == "clash" and not is_valid_subscribe_url(url_s):
+            raise ValueError(f'subscribes["{name}"].url 对 clash 后端须为有效订阅 URL')
+        if be == "v2ray" and url_s and not is_valid_subscribe_url(url_s):
+            raise ValueError(f'subscribes["{name}"].url 若填写则须为有效 URL')
+        out[name] = {"url": url_s, "backend": be}
     return out
+
+
+def resolve_default_subscribe_name(
+    subs: dict[str, dict[str, str]],
+    default_sub: Any,
+) -> str:
+    """与 update_proxy_config 一致：DEFAULT 或缺省/无效名 -> 第一个订阅名。"""
+    names = list(subs.keys())
+    if not names:
+        return ""
+    d = str(default_sub if default_sub is not None else "DEFAULT").strip()
+    if d == "DEFAULT" or d not in subs:
+        return names[0]
+    return d
 
 
 def set_document_subscribes(
     doc: MutableMapping[str, Any],
-    subscribes: dict[str, str],
+    subscribes: dict[str, dict[str, str]],
     key_order: list[str] | None = None,
 ) -> None:
-    """Update subscribes in place when possible to keep comments/order outside that block.
-
-    ``key_order`` controls YAML key order (must cover all keys in ``subscribes``; missing keys
-    are appended at the end). If None, keys are sorted alphabetically (legacy).
-    """
+    """将 subscribes 写回文档（值为含 url、backend 的映射）。"""
     raw = doc.get("subscribes")
     if key_order is None:
         keys = sorted(subscribes.keys())
@@ -83,11 +106,11 @@ def set_document_subscribes(
     if isinstance(raw, CommentedMap):
         raw.clear()
         for k, v in ordered.items():
-            raw[k] = v
+            raw[k] = dict(v)
         return
     cm = CommentedMap()
     for k, v in ordered.items():
-        cm[k] = v
+        cm[k] = dict(v)
     doc["subscribes"] = cm
 
 
@@ -95,3 +118,10 @@ def save_user_config_dict(path: Path, data: MutableMapping[str, Any]) -> None:
     y = _yaml_roundtrip()
     with path.open("w", encoding="utf-8") as f:
         y.dump(data, f)
+
+
+def persist_default_subscribe(path: Path, subscribe_name: str) -> None:
+    """将 ``default_subscribe`` 设为 ``subscribe_name``（保留 YAML 注释与格式）。"""
+    doc = load_user_config_dict(path)
+    doc["default_subscribe"] = str(subscribe_name).strip()
+    save_user_config_dict(path, doc)

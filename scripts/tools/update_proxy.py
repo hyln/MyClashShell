@@ -6,7 +6,7 @@ EXEC_DIR = os.getenv('MYCLASH_ROOT_PWD')
 url = "http://127.0.0.1:9090/configs"
 
 payload = json.dumps({
-  "path": EXEC_DIR+"/clash/configs/config.yaml"
+  "path": EXEC_DIR+"/mcs/configs/config.yaml"
 })
 headers = {
   'Content-Type': 'application/json'

@@ -10,9 +10,9 @@ if __name__=="__main__":
     # find path
     myclash_root_pwd = os.getenv('MYCLASH_ROOT_PWD') # None
     if myclash_root_pwd is None:
-        raise TypeError("[ERROR] 找不到 MYCLASH_ROOT_PWD;请尝试 source /etc/bash.bashrc ;source ~/.bashrc 然后重新运行")
-    raw_configs_pwd = "{}/clash/raw_configs".format(myclash_root_pwd)
-    final_configs_pwd = "{}/clash/final_configs".format(myclash_root_pwd)
+        raise TypeError("[ERROR] 找不到 MYCLASH_ROOT_PWD;请尝试 source ~/.bashrc 后重新运行")
+    raw_configs_pwd = "{}/mcs/raw_configs".format(myclash_root_pwd)
+    final_configs_pwd = "{}/mcs/final_configs".format(myclash_root_pwd)
     user_config_path = myclash_root_pwd+'/config.yaml'
 
     # 创建日志记录器

@@ -1,5 +1,5 @@
 [Unit]
-Description=MyClashShell (supervised Clash core)
+Description=MyClashShell MCS manager (systemd → Python; mihomo as mcs/bin/clash via subprocess)
 After=network-online.target
 Wants=network-online.target
 
@@ -8,10 +8,11 @@ Type=simple
 TimeoutStartSec=30
 WorkingDirectory=<|PLACEHOLD_1|>
 Environment=MYCLASH_ROOT_PWD=<|PLACEHOLD_2|>
-ExecStart=<|PLACEHOLD_1|>/venv/bin/python3 <|PLACEHOLD_2|>/scripts/runtime/clash_supervisor.py
+ExecStart=<|PLACEHOLD_1|>/venv/bin/python3 <|PLACEHOLD_2|>/scripts/runtime/mcs_manager.py
 ExecStop=/bin/kill -TERM $MAINPID
 Restart=always
 RestartSec=10s
 
 [Install]
-WantedBy=multi-user.target
+# 用户级 systemd（systemctl --user enable）使用 default.target，勿用 multi-user.target
+WantedBy=default.target

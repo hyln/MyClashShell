@@ -1,10 +1,5 @@
 myclashinfo_welcome(){
     echo "Welcome to MyClashShell for Ubuntu"
-    echo "Before you start, please make sure:"
-    echo "1. You are not configuring it inside a Docker container"
-    echo "2. You are not configuring it inside WSL2"
-    echo ""
-    echo "Currently, each run will delete the previous program and data"
     echo "Are you sure you want to start? (Press Ctrl+c to exit)"
 }
 
@@ -15,10 +10,13 @@ echo_guider_after_success(){
     echo "---Set up config.yaml---"
     echo "1. Please modify the user_config.yaml generated in the MyClashShell directory according to your actual situation"
     echo "2. In the file, <your_proxy_name> and <your_proxy_url> represent the name (any name) and subscription URL for the proxy you set"
+    echo "---systemd user service---"
+    echo "3. Clash is registered as a systemd --user unit under ~/.config/systemd/user/"
+    echo "   If it does not start at boot, run: sudo loginctl enable-linger $(whoami)"
     echo "---Source---"
-    echo "3. To make MyClash effective in the terminal, run \"source /etc/bash.bashrc; source ~/.bashrc\" in this window, or you can open a new terminal"
-    echo "4. Now, you can directly type myclash or myclash help to learn how to use it"
+    echo "4. Run source ~/.bashrc in this terminal (or open a new terminal) so MYCLASH_ROOT_PWD and myclash are available"
+    echo "5. Now you can type myclash or myclash help"
     echo "---Update Subscription---"
-    echo "5. After setting up config.yaml, you can update the subscription using myclash service update_subscribe"
+    echo "6. After config.yaml is ready, update the subscription with: myclash service update_subcribe"
     echo_R "Note: After the installation is complete, the MyClashShell folder cannot be deleted"
 }

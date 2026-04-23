@@ -10,19 +10,24 @@ myclashshell 仅提供对Ubuntu平台的支持
 ```bash
 git clone https://github.com/hyaline-wang/MyClashShell.git
 cd MyClashShell
-sudo ./install/install.sh
-# sudo ./install/install.sh --use-cache # 如果已经安装过一遍了，正在重新装，可以不重复下载
-########## 
-source /etc/bash.bashrc ;source ~/.bashrc
+# 1) 系统级准备（需 root）：apt 依赖、sudoers 代理保留、清理旧版系统 systemd 与 /etc/bash.bashrc 片段
+sudo ./install/install_root.sh
+# 不写入 sudoers 里代理 env_keep 时（少见）: sudo ./install/install_root.sh --deactivate-for-sudo
+# 2) 用户级安装：venv、下载内核、systemd --user、写入当前用户的 ~/.bashrc（推荐不用 sudo；root 执行时脚本会提示预期路径）
+./install/install.sh
+##########
+source ~/.bashrc
 ```
 
-卸载（通常需 root）：`sudo ./install/uninstall.sh`，然后手动删除本仓库目录。
+**`install_root.sh`**：需要 root。**`install.sh`**：推荐在将使用 MyClash 的登录用户下执行；若以 **root** 执行亦可，脚本会打印 systemd 与 `~/.bashrc` 的预期路径，请自行判断是否合适。`install.sh` 开头用 **`ps -p 1 -o comm=`** 是否为 **`systemd`** 判断本机是否 systemd init；非 root 时还会检查 **`/run/user/$UID`** 与 **`systemctl --user`**。无用户会话时可 **`sudo loginctl enable-linger <用户名>`** 后再装。`apt` 包列表见 **`install/apt-packages.txt`**。
+
+**卸载**：普通用户 `./install/uninstall.sh`（用户 systemd、`~/.bashrc`、本仓库下 `mcs/`）；若曾装过旧版系统服务，再执行 **`sudo ./install/uninstall_root.sh`**。最后可手动删除整个仓库目录。
 
 安装完成后
 1. 使用 `myclash` 命令查看软件信息
 3. 通过`myclash help` 查看帮助
 
-> 首次使用更新完代理后需要使用 `sudo systemctl restart myclash`（或 `myclash service restart`）
+> 首次使用更新完代理后执行 `myclash service restart`（systemd **用户**服务，无需 sudo）
 
 ## 快速开始
 
@@ -31,16 +36,26 @@ source /etc/bash.bashrc ;source ~/.bashrc
 ```yaml
 shell_proxy_default: 'ON'  #  ON / OFF
 subscribes:
-    <your_proxy_name>: "<you_proxy_url>"
+  <your_proxy_name>:
+    url: "<you_proxy_url>"
+    backend: clash   # clash：订阅合并 / TUI / 9090 API；v2ray：见下文
 default_subscribe: "DEFAULT"
 ```
  - shell_proxy_default: 选择是否自动在命令行开启代理，保存即生效
- - <your_proxy_name>和<you_proxy_url>分别指 自己为这个代理设定的名字 以及 订阅链接，修改后运行
+ - 每条订阅须为 **`url` + `backend`**（`clash` 或 `v2ray`），不再支持旧版「键名直接对应 URL 字符串」。
+ - `<your_proxy_name>` 与 `<you_proxy_url>` 分别为订阅显示名与订阅链接；修改后运行
     ```bash
       # 更新订阅
       myclash service update_subcribe 
     ```
- - default_subscribe： 这是默认使用的代理，你可以填subscribe_urls中的任意名字,DEFAULT 是指使用 subscribe_urls 中的第一个
+ - Clash 订阅下载的原始 YAML 与 **`cache/current_sub.txt`**（当前订阅名）均在仓库 **`cache/`**；`tmp/` 仅保留安装过程生成物等，与下载缓存分开。
+ - **default_subscribe**：当前默认使用的订阅名，可填 `subscribes` 下任意键；**`DEFAULT`** 表示使用 YAML 中**第一个**订阅。`mcs_manager` 会根据该订阅的 **`backend`** 决定拉起 **Clash** 还是 **v2ray**；切换默认订阅后执行 **`myclash service restart`** 使内核与配置一致。
+
+### Clash 与 v2ray 后端（按订阅）
+
+- **`backend: clash`**：参与订阅下载与合并、`myclash service update_subcribe`、TUI、`127.0.0.1:9090` API。
+- **`backend: v2ray`**：由 `mcs_manager` 执行 `mcs/bin/v2ray run -config mcs/configs/v2ray.json`；**与 Clash 的 `config.yaml` 无关**，需自行编辑 **`mcs/configs/v2ray.json`**（安装时会从 `install/templates/v2ray-default.json` 拷贝占位，默认 SOCKS `127.0.0.1:7890` 直连出站）。`update_subcribe` 对 v2ray 条目不下载 Clash 配置，仅更新当前订阅名等元数据。
+- v2ray 与其它安装包 URL 统一写在 **`install/download.yaml`**（按架构 `amd64` / `armv7` / `arm64`），在 **`install.sh`** 阶段下载到 **`cache/`** 再安装到 **`mcs/bin/v2ray`**。
 
 ## 配置
 
@@ -50,9 +65,15 @@ default_subscribe: "DEFAULT"
 ```yaml
 shell_proxy_default: 'ON'  ##  ON  / OFF
 subscribes:
-    <your_proxy_name_1>: "<you_proxy_url_1>"
-    <your_proxy_name_2>: "<you_proxy_url_2>"
-    <your_proxy_name_3>: "<you_proxy_url_3>"
+  <your_proxy_name_1>:
+    url: "<you_proxy_url_1>"
+    backend: clash
+  <your_proxy_name_2>:
+    url: "<you_proxy_url_2>"
+    backend: clash
+  <your_proxy_name_3>:
+    url: ""
+    backend: v2ray
 default_subscribe: "DEFAULT"
 ```
 
@@ -144,4 +165,4 @@ export http_proxy="http://172.17.0.1:7890"
 
 ### 自定义规则
 
-请直接在`user_config.yaml` 的 `rules_template` 所指文件（默认 `install/templates/rules.yaml`）里，为 其他需要的域名追加规则，策略名用你合并后的组名（启用 `slim_proxy_groups` 时一般为 `Via-Proxy`）。保存后执行 `myclash service update_subcribe` 下载并合并订阅。需要可在 `myclash service get_logs` 中核对是否走代理。
+请直接在`user_config.yaml` 的 `rules_template` 所指文件（默认 `install/templates/rules.yaml`）里，为 其他需要的域名追加规则，策略名用你合并后的组名（启用 `slim_proxy_groups` 时一般为 `Via-Proxy`）。保存后执行 `myclash service update_subcribe` 下载并合并订阅。需要可在 `myclash log`（或 `myclash service get_logs`）里看 **systemd 用户服务日志**（mcs + 内核子进程输出）核对是否走代理。

@@ -1,26 +1,55 @@
 #!/bin/bash
 source ${MYCLASH_ROOT_PWD}/scripts/tools/common_func.sh
+
+# 与 user_config.yaml 中 port / socks-port 一致（缺省 7890 / 7891）
+_myclash_http_port() {
+    local p=7890
+    local _p
+    _p=$("${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/tools/read_yaml.py" port 2>/dev/null)
+    if [[ "$_p" =~ ^[0-9]+$ ]]; then
+        p="$_p"
+    fi
+    echo "$p"
+}
+
+_myclash_socks_port() {
+    local p=7891
+    local _p
+    _p=$("${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/tools/read_yaml.py" socks-port 2>/dev/null)
+    if [[ "$_p" =~ ^[0-9]+$ ]]; then
+        p="$_p"
+    fi
+    echo "$p"
+}
+
 myclash()
 {
     case $1 in
     'service')
         if [ $2 = "start" ]; then
-            sudo systemctl start myclash
+            systemctl --user start myclash.service
 
         elif [ $2 = "stop" ]; then
-            sudo systemctl stop myclash
+            systemctl --user stop myclash.service
 
         elif [ $2 = "restart" ]; then
-            sudo systemctl restart myclash
+            systemctl --user restart myclash.service
         elif [ $2 = "status" ]; then
-            sudo systemctl status myclash
+            systemctl --user status myclash.service
         elif [ $2 = "get_logs" ]; then
-            echo RUNNING
-            curl --location 'http://127.0.0.1:9090/logs'
+            # 与内核子进程（mihomo / v2ray）一致：看 systemd 用户单元日志，不再走 Clash /logs HTTP
+            if ! command -v journalctl >/dev/null 2>&1; then
+                echo "myclash service get_logs: 未找到 journalctl（需 systemd）" >&2
+                return 1
+            fi
+            journalctl --user -u myclash.service -n 200 -f "${@:3}"
         elif [ $2 = "update_subcribe" ]; then
             myclash shell off
             ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/update_proxy_config.py
             myclash shell on
+        elif [ $2 = "reload_kernel" ]; then
+            PYTHONPATH="${MYCLASH_ROOT_PWD}" \
+                "${MYCLASH_ROOT_PWD}/venv/bin/python3" -m scripts.lib.mcs_api_client
         else
             echo command $1 $2 not exist
         fi
@@ -29,14 +58,18 @@ myclash()
         if [ $2 = "on" ]; then
             # Anaconda /bin 也有叫做 gsettings 的程序,所以给了绝对路径
             # 以下设置也适用于 unity 桌面
+            _hp="$(_myclash_http_port)"
+            _sp="$(_myclash_socks_port)"
             /usr/bin/gsettings set org.gnome.system.proxy.http host 127.0.0.1
-            /usr/bin/gsettings set org.gnome.system.proxy.http port 7890
+            /usr/bin/gsettings set org.gnome.system.proxy.http port "$_hp"
             /usr/bin/gsettings set org.gnome.system.proxy.https host 127.0.0.1
-            /usr/bin/gsettings set org.gnome.system.proxy.https port 7890
+            /usr/bin/gsettings set org.gnome.system.proxy.https port "$_hp"
+            /usr/bin/gsettings set org.gnome.system.proxy.socks host 127.0.0.1
+            /usr/bin/gsettings set org.gnome.system.proxy.socks port "$_sp"
             /usr/bin/gsettings set org.gnome.system.proxy mode manual
             echo "start proxy in Gnome Desktop"
         elif [ $2 = "off" ]; then
-            gsettings set org.gnome.system.proxy mode none
+            /usr/bin/gsettings set org.gnome.system.proxy mode none
             echo "close proxy in Gnome Desktop"
         else
             echo command $1 $2 not exist
@@ -44,21 +77,49 @@ myclash()
         ;;
     'shell')
         if [ $2 = "on" ]; then
-            export http_proxy=http://127.0.0.1:7890
-            export https_proxy=http://127.0.0.1:7890
+            _hp="$(_myclash_http_port)"
+            export http_proxy=http://127.0.0.1:${_hp}
+            export https_proxy=http://127.0.0.1:${_hp}
+            export ftp_proxy=http://127.0.0.1:${_hp}
+            export no_proxy=127.0.0.1,localhost
+
             echo "start proxy in Terminal"
         elif [ $2 = "off" ]; then
-            unset http_proxy;unset https_proxy
+            unset http_proxy;unset https_proxy;
+            unset ftp_proxy;unset no_proxy;
             echo "close proxy in Terminal"
         else
             echo command $1 $2 not exist
         fi
+        ;;
+    'log')
+        if ! command -v journalctl >/dev/null 2>&1; then
+            echo "myclash log: 未找到 journalctl（需 systemd）" >&2
+            return 1
+        fi
+        journalctl --user -u myclash.service -n 200 -f "${@:2}"
         ;;
     'cfg')
         ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/myclash.py $1 $2
         ;;
     'change_subscribe')
         ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/change_sub.py $2
+        ;;
+    'ui')
+        # 按 default_subscribe 的 backend（优先 mcs GET /kernel/status）自动打开 Clash TUI 或 v2ray TUI
+        _be=$(PYTHONPATH="${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}/venv/bin/python3" \
+            "${MYCLASH_ROOT_PWD}/scripts/tools/myclash_ui_backend.py" 2>/dev/null | tr -d '\r\n')
+        _be="${_be:-clash}"
+        case "${_be}" in
+        v2ray)
+            PYTHONPATH="${MYCLASH_ROOT_PWD}" \
+                "${MYCLASH_ROOT_PWD}/venv/bin/python3" -m scripts.tui_v2ray
+            ;;
+        *)
+            PYTHONPATH="${MYCLASH_ROOT_PWD}" \
+                "${MYCLASH_ROOT_PWD}/venv/bin/python3" -m scripts.tui ${2:+$2}
+            ;;
+        esac
         ;;
     'tui')
         PYTHONPATH="${MYCLASH_ROOT_PWD}" \
@@ -117,36 +178,59 @@ myclash()
             ;;
         esac
         ;;
+    'v2ray')
+        case $2 in
+        'ui')
+            PYTHONPATH="${MYCLASH_ROOT_PWD}" \
+                "${MYCLASH_ROOT_PWD}/venv/bin/python3" -m scripts.tui_v2ray "${@:3}"
+            ;;
+        'log')
+            if ! command -v journalctl >/dev/null 2>&1; then
+                echo "myclash v2ray log: 未找到 journalctl（需 systemd）" >&2
+                return 1
+            fi
+            # v2ray 子进程与 mcs_manager 的 stdout/stderr 由 systemd --user 写入 journal
+            journalctl --user -u myclash.service -n 200 -f "${@:4}"
+            ;;
+        *)
+            echo "用法:"
+            echo "  myclash v2ray ui   — 节点选择与测速（Textual）"
+            echo "  myclash v2ray log  — 同 myclash log / service get_logs（journalctl myclash.service）"
+            echo "  追加参数会原样传给 journalctl，例如: myclash v2ray log --since today"
+            ;;
+        esac
+        ;;
     'help')
         echo "myclash [command*] [option*]"
         echo "Command:"
-        echo "      service [ start/stop/restart/status/get_logs/update_subcribe ]"
+        echo "      log [journalctl参数…]  — 跟踪 myclash.service（mcs + mihomo/v2ray 子进程）"
+        echo "      service [ start/stop/restart/status/get_logs/update_subcribe/reload_kernel ]"
         echo "      window [ on/off ]"
         echo "      shell [ on/off ]"
         echo "      cfg"
-        echo "      tui [proxy_group(optional)]"
+        echo "      ui [proxy_group(optional)]  — 按后端自动打开 Clash TUI 或 v2ray 选节点界面"
+        echo "      tui [proxy_group(optional)]  — 仅 Clash（mihomo）TUI，与 ui 在 clash 后端时等价"
+        echo "      v2ray ui | v2ray log  — v2ray 选节点；log 与 service get_logs 相同（journalctl）"
         echo "      share serve [端口] | share stop | share status"
         echo "          本机 HTTP 提供 slave_bootstrap.sh（局域网 curl 安装 Slave）"
         echo "======================"
         echo "Remark"
-        echo "[command] service 负责管理clash服务"
-        echo "[option] clash的服务设置为在安装完成后开机自启,你可以手动开启，关闭或重启服务[start/stop/restart]"
+        echo "[command] service 负责管理 MCS 内核（systemd --user，无需 sudo）"
+        echo "[option] 安装后对用户会话 enable，可手动 start/stop/restart；无登录会话的机器见 loginctl enable-linger"
         echo "[option] update_subcribe 选项可以更新代理"
-        echo "[option] get_logs 可以监看日志"
+        echo "[option] reload_kernel 通知 mcs_manager 按 user_config 重拉 Clash/v2ray 子进程（默认 http://127.0.0.1:9091）"
+        echo "[option] get_logs / myclash log  — journalctl 用户服务日志（含 mihomo/v2ray 标准输出）"
         echo "[command] window  命令管理在图形化应用(如 chrome )[on/off]代理"
         echo "[command] shell   命令管理在当前终端窗口[on/off]代理,默认值为config.yaml中的shell_proxy_default参数"
         echo "[command] cfg "
-        echo "[command] tui    终端节点面板（方向键选择，回车切换）"
+        echo "[command] ui     终端节点面板（clash / v2ray 自动切换）"
+        echo "[command] tui    同 ui 之 Clash 专用入口"
         ;;
     *)
         # ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/tools/gui/gui.py
         echo Myclash $(cat ${MYCLASH_ROOT_PWD}/install/version)
         # 从 user_config.yaml 读取常用项（与 TUI / 脚本约定一致）
-        HTTP_PORT=7890
-        _p=$("${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/tools/read_yaml.py" port 2>/dev/null)
-        if [[ "$_p" =~ ^[0-9]+$ ]]; then
-            HTTP_PORT="$_p"
-        fi
+        HTTP_PORT="$(_myclash_http_port)"
         export MYCLASH_HTTP_PORT="${HTTP_PORT}"
         _al=$("${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/tools/read_yaml.py" allow-lan 2>/dev/null)
         case "$_al" in
@@ -167,7 +251,7 @@ myclash()
                 API_BASE="http://${_ec}"
             fi
         fi
-        echo "---- Clash Core Summary ----"
+        echo "---- Summary ----"
         echo "HTTP 代理端口: ${HTTP_PORT}  (socks 见 user_config 中 socks-port)"
         echo "允许局域网 (allow-lan): ${LAN_TXT}"
         bash ${MYCLASH_ROOT_PWD}/scripts/tools/test_proxy_status.sh > /dev/null
@@ -180,12 +264,12 @@ myclash()
             echo_R "连接失败"
         fi
         # current_config_name=$(${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/tools/read_yaml.py default_subscribe)
-        current_config_name=$(cat ${MYCLASH_ROOT_PWD}/tmp/current_sub.txt)
+        current_config_name=$(cat ${MYCLASH_ROOT_PWD}/cache/current_sub.txt)
 
         echo "当前使用配置: $current_config_name"
         echo "你可以通过 myclash help 查看帮助"
         echo "==================================="
-        echo "终端控制面板: myclash tui"
+        echo "终端控制面板: myclash ui（或 myclash tui）"
     esac
     
 }
@@ -196,13 +280,16 @@ _myclash()
 
     case $cmd in
     'myclash')
-        COMPREPLY=( $(compgen -W 'service window shell help cfg change_subscribe tui share' -- $cur) )
+        COMPREPLY=( $(compgen -W 'service window shell log help cfg change_subscribe ui tui share v2ray' -- $cur) )
+        ;;
+    'v2ray')
+        COMPREPLY=( $(compgen -W 'ui log' -- $cur) )
         ;;
     'share')
         COMPREPLY=( $(compgen -W 'serve stop status' -- $cur) )
         ;;
     'service')
-        COMPREPLY=( $(compgen -W 'start stop restart status get_logs update_subcribe' -- $cur) ) 
+        COMPREPLY=( $(compgen -W 'start stop restart status get_logs update_subcribe reload_kernel' -- $cur) ) 
         ;;
     'window')
         COMPREPLY=( $(compgen -W 'on off' -- $cur) ) 
@@ -219,9 +306,10 @@ complete -F _myclash myclash
 # Auto start Proxy in Terminal
 shell_proxy_default=$(${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/tools/read_yaml.py shell_proxy_default)
 if [ $shell_proxy_default = "ON" ]; then
-    export http_proxy=http://127.0.0.1:7890
-    export https_proxy=http://127.0.0.1:7890
-    echo "start proxy in Terminal"
+    _hp="$(_myclash_http_port)"
+    export http_proxy=http://127.0.0.1:${_hp}
+    export https_proxy=http://127.0.0.1:${_hp}
+    echo "start proxy in Terminal (http ${_hp})"
 else
     unset http_proxy;unset https_proxy
     echo "close proxy in Terminal"

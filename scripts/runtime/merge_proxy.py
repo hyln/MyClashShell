@@ -9,6 +9,28 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# 合并订阅 raw 时，允许从 user_config.yaml 顶层读取的 Clash / mihomo 字段（其余键为 MCS 元数据，不参与合并）
+_CLASH_COVER_KEYS: frozenset[str] = frozenset(
+    {
+        "port",
+        "socks-port",
+        "mixed-port",
+        "mode",
+        "allow-lan",
+        "log-level",
+        "external-controller",
+    }
+)
+_CLASH_ADD_KEYS: frozenset[str] = frozenset({"proxies", "proxy-groups", "rules"})
+
+
+def clash_overlay_from_user_config(doc: dict | None) -> dict[str, object]:
+    """从完整 user_config 文档中抽出参与合并的 Clash 顶层键。"""
+    if not isinstance(doc, dict):
+        return {}
+    allow = _CLASH_COVER_KEYS | _CLASH_ADD_KEYS
+    return {k: v for k, v in doc.items() if k in allow}
+
 
 def slim_proxy_groups_enabled(user_cfg: dict | None) -> bool:
     """user_config.yaml 中 slim_proxy_groups 开启时，合并后仅保留 Via-Proxy 策略组。"""
@@ -104,76 +126,54 @@ def _finalize_config(
 
 
 def merge_cfg(
-    raw_rule_path,
-    custum_rule_path,
-    gen_cfg_path,
+    raw_rule_path: str,
+    gen_cfg_path: str,
+    *,
+    user_config_doc: dict | None = None,
     rules_template_path: str | None = None,
     slim_proxy_groups: bool = False,
-):
-    '''
-    通过下载的profile和自定义的规则生成最终使用的规则
+) -> bool:
+    """将订阅 raw 与 ``user_config.yaml`` 中允许的 Clash 顶层键合并，写入 ``gen_cfg_path``。
 
-    参数:
-    raw_rule_path: 下载的规则路径 .yaml 结尾
-    custum_rule_path: 自定义规则路径 .yaml 结尾
-    gen_rule_path: 生成的新profile路径 .yaml 结尾
-    rules_template_path: 可选，整段替换 rules
-    slim_proxy_groups: 为 True 时用 Via-Proxy（全部节点+DIRECT）替换订阅 proxy-groups
-    '''
+    不再读取 ``custom_configs/<订阅名>.yaml``；监听端口、模式等一律写在 ``user_config.yaml`` 顶层。
+    """
     check_yaml_path(raw_rule_path)
-    check_yaml_path(custum_rule_path)
-    # check_yaml_path(gen_cfg_path)
 
-    # 读取raw_cfg
-    raw_configs_stream = open(raw_rule_path, "r",encoding='utf-8')
-    raw_configs = yaml.safe_load(raw_configs_stream)
+    with open(raw_rule_path, "r", encoding="utf-8") as raw_configs_stream:
+        raw_configs = yaml.safe_load(raw_configs_stream)
 
-    if(raw_configs is None):
+    if raw_configs is None:
         print(f"cann't read rule from  {raw_rule_path}")
         return False
-    # 如果 custom_rule 文件不存在，直接复制raw，然后退出
-    if(os.path.exists(custum_rule_path) is False):
-        _finalize_config(raw_configs, rules_template_path, slim_proxy_groups)
-        with open(gen_cfg_path,'w') as yamlfile:
-            yaml.safe_dump(raw_configs, yamlfile,allow_unicode=True)
-        return True
-    # 读取 custom_rule
-    custom_configs_stream = open(custum_rule_path, "r",encoding='utf-8')
-    custom_configs = yaml.safe_load(custom_configs_stream)
-    # 如果custom_rule是空的，直接复制raw，然后退出
-    if(custom_configs is None):
-        _finalize_config(raw_configs, rules_template_path, slim_proxy_groups)
-        with open(gen_cfg_path,'w') as yamlfile:
-            yaml.safe_dump(raw_configs, yamlfile,allow_unicode=True)
-        return True
-    
-    # merge 分为两个部分
-    # 1. cover
-    # 2. append
 
-    cover_configs = ["port" , "socks-port", "mode", "allow-lan", "log-level", "external-controller"]
-    # port: 7890
-    # socks-port: 7891
-    # allow-lan: true
-    # mode: Rule
-    # log-level: info
-    # external-controller: :9090
+    custom_configs = clash_overlay_from_user_config(user_config_doc)
+    if not custom_configs:
+        _finalize_config(raw_configs, rules_template_path, slim_proxy_groups)
+        with open(gen_cfg_path, "w", encoding="utf-8") as yamlfile:
+            yaml.safe_dump(raw_configs, yamlfile, allow_unicode=True)
+        return True
 
     for key, value in custom_configs.items():
-        if key in cover_configs:
-            raw_configs[key] = custom_configs[key]
+        if key in _CLASH_COVER_KEYS:
+            raw_configs[key] = value
 
-    #  
-    add_configs = ["proxies" , "proxy-groups", "rules"]
     for key, value in custom_configs.items():
-        if key in add_configs:
-            # print(type(custom_configs[key]))
-            if type(custom_configs[key]) is list: 
-                for i in custom_configs[key]:
-                    raw_configs[key].insert(0, i)
+        if key not in _CLASH_ADD_KEYS:
+            continue
+        if not isinstance(value, list):
+            continue
+        bucket = raw_configs.get(key)
+        if bucket is None:
+            raw_configs[key] = list(value)
+            continue
+        if not isinstance(bucket, list):
+            logger.warning("合并跳过 %s：订阅中该字段不是列表", key)
+            continue
+        for i in value:
+            bucket.insert(0, i)
 
     _finalize_config(raw_configs, rules_template_path, slim_proxy_groups)
 
-    with open(gen_cfg_path,'w') as yamlfile:
-        yaml.safe_dump(raw_configs, yamlfile,allow_unicode=True)
+    with open(gen_cfg_path, "w", encoding="utf-8") as yamlfile:
+        yaml.safe_dump(raw_configs, yamlfile, allow_unicode=True)
     return True

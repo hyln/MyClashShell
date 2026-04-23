@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
-from rich.text import Text
-
 
 def _fmt_bytes(n: float) -> str:
     for unit in ("B", "KB", "MB", "GB", "TB"):
@@ -54,51 +50,3 @@ def _overview_sparkline_columns(term_width: int, reserve: int = 10, stretch: int
     visual = max(48, min(tw - reserve, 160))
     sample_cols = max(32, visual // max(1, stretch))
     return sample_cols, stretch
-
-
-_LOG_TYPE_STYLES: dict[str, str] = {
-    "info": "cyan",
-    "warning": "yellow",
-    "error": "bold red",
-    "debug": "dim",
-}
-
-
-def clash_log_searchable(line: str) -> str:
-    """Plain text used for ctrl+i filter (matches payload, not raw JSON)."""
-    s = line.strip()
-    if not s.startswith("{"):
-        return line
-    try:
-        obj = json.loads(s)
-    except json.JSONDecodeError:
-        return line
-    if isinstance(obj, dict):
-        p = obj.get("payload")
-        if isinstance(p, str):
-            return p
-    return line
-
-
-def clash_log_to_rich(line: str) -> str | Text:
-    """Turn Clash REST log line (JSON) into readable Rich output."""
-    s = line.strip()
-    if not s.startswith("{"):
-        return line
-    try:
-        obj = json.loads(s)
-    except json.JSONDecodeError:
-        return line
-    if not isinstance(obj, dict):
-        return line
-    typ = str(obj.get("type") or "").strip() or "log"
-    payload = obj.get("payload")
-    if payload is None:
-        return line
-    body = payload if isinstance(payload, str) else str(payload)
-
-    label_style = _LOG_TYPE_STYLES.get(typ.lower(), "dim")
-    out = Text()
-    out.append(f"{typ.upper():<7} ", style=label_style)
-    out.append(body)
-    return out

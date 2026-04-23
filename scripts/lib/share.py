@@ -16,16 +16,16 @@ def slave_install_hint_lines(
 ) -> list[str]:
     script = slave_bootstrap_script(Path(repo_root))
     return [
-        f"本机代理: http://{host}:{clash_http_port}\n",
-        "临时 export（当前 shell）：\n",
+        f"Local proxy: http://{host}:{clash_http_port}\n",
+        "Temporary export (current shell):\n",
         f"  export http_proxy=http://{host}:{clash_http_port}\n",
         f"  export https_proxy=http://{host}:{clash_http_port}\n\n",
-        "本机 HTTP 提供脚本（先在本机执行 myclash share serve [端口]，默认 8765）：\n",
+        "HTTP install from this host (run myclash share serve [port] here first; default 8765):\n",
         f"  curl -fsSL http://{host}:{serve_port}/slave_bootstrap.sh "
         f"| sudo bash -s -- {host} {clash_http_port}\n\n",
-        "本地脚本安装（需 scp 或 U 盘拷贝脚本到 Slave）：\n",
+        "Local script install (copy slave_bootstrap.sh to the slave via scp or USB):\n",
         f"  sudo bash {script} {host} {clash_http_port}\n\n",
-        "若已发布到 Git，可在 Slave 上：\n",
+        "If published to Git, on the slave run:\n",
         f"  curl -fsSL {GITHUB_RAW_SLAVE_BOOTSTRAP_MAIN} "
         f"| sudo bash -s -- {host} {clash_http_port}\n",
     ]
