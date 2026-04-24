@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from textual.containers import Vertical, VerticalScroll
-from textual.events import Key, Resize
+from textual.errors import NoWidget
+from textual.events import Click, Key, MouseDown, MouseUp, Resize
 from textual.widgets import Button
 
 from .formatting import _truncate
@@ -39,11 +40,15 @@ class ProxyNodeScroll(VerticalScroll):
         *args,
         get_current_view: Callable[[], str | None] | None = None,
         on_proxy_move_selection_delta: Callable[[int], bool] | None = None,
+        on_proxy_pick_by_name: Callable[[str], None] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
         self._get_current_view = get_current_view
         self._on_proxy_move_selection_delta = on_proxy_move_selection_delta
+        self._on_proxy_pick_by_name = on_proxy_pick_by_name
+        # Textual 仅在 down/up 命中同一 widget 时合成 Click；在滚动区内轻微移动会丢 Click，用节点名兜底。
+        self._mouse_pick_start: tuple[int, int, str] | None = None
 
     def action_scroll_up(self) -> None:
         gv = self._get_current_view
@@ -58,6 +63,51 @@ class ProxyNodeScroll(VerticalScroll):
         if gv is not None and fn is not None and gv() == "view-proxies" and fn(1):
             return
         super().action_scroll_down()
+
+    def _hit_proxy_button(self, sx: int, sy: int) -> ProxyNodeButton | None:
+        try:
+            w, _ = self.screen.get_widget_at(sx, sy)
+        except NoWidget:
+            return None
+        while w is not None:
+            if isinstance(w, ProxyNodeButton):
+                return w
+            if w is self:
+                break
+            w = w.parent
+        return None
+
+    def on_mouse_down(self, event: MouseDown) -> None:
+        gv = self._get_current_view
+        fn = self._on_proxy_pick_by_name
+        if gv is None or fn is None or gv() != "view-proxies":
+            self._mouse_pick_start = None
+            return
+        if event.button != 1:
+            return
+        btn = self._hit_proxy_button(event.screen_x, event.screen_y)
+        if btn is not None:
+            self._mouse_pick_start = (event.screen_x, event.screen_y, btn.node_name)
+        else:
+            self._mouse_pick_start = None
+
+    def on_mouse_up(self, event: MouseUp) -> None:
+        start = self._mouse_pick_start
+        self._mouse_pick_start = None
+        gv = self._get_current_view
+        pick = self._on_proxy_pick_by_name
+        if start is None or gv is None or pick is None or gv() != "view-proxies":
+            return
+        if event.button != 1:
+            return
+        sx0, sy0, name = start
+        if abs(event.screen_x - sx0) + abs(event.screen_y - sy0) > 2:
+            return
+        btn_up = self._hit_proxy_button(event.screen_x, event.screen_y)
+        if btn_up is not None:
+            pick(btn_up.node_name)
+            return
+        pick(name)
 
 
 class ProxyNodeRows(Vertical):
@@ -117,6 +167,10 @@ class ProxyNodeButton(Button):
 
     can_focus = False
 
+    async def _on_click(self, event: Click) -> None:
+        """选用逻辑在 ProxyNodeScroll 的 mouse 兜底中统一处理，避免与 Textual 的 Click 判定重复。"""
+        event.stop()
+
     DEFAULT_CSS = """
     ProxyNodeButton {
         width: 100%;
@@ -127,6 +181,8 @@ class ProxyNodeButton(Button):
     }
     ProxyNodeButton.-cursor {
         border: heavy $accent;
+        background-tint: $accent 25%;
+        text-style: bold;
     }
     """
 

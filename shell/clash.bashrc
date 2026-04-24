@@ -66,6 +66,8 @@ myclash()
             /usr/bin/gsettings set org.gnome.system.proxy.https port "$_hp"
             /usr/bin/gsettings set org.gnome.system.proxy.socks host 127.0.0.1
             /usr/bin/gsettings set org.gnome.system.proxy.socks port "$_sp"
+            /usr/bin/gsettings set org.gnome.system.proxy.ftp host 127.0.0.1
+            /usr/bin/gsettings set org.gnome.system.proxy.ftp port "$_hp"
             /usr/bin/gsettings set org.gnome.system.proxy mode manual
             echo "start proxy in Gnome Desktop"
         elif [ $2 = "off" ]; then
@@ -81,12 +83,13 @@ myclash()
             export http_proxy=http://127.0.0.1:${_hp}
             export https_proxy=http://127.0.0.1:${_hp}
             export ftp_proxy=http://127.0.0.1:${_hp}
+            export all_proxy=
             export no_proxy=127.0.0.1,localhost
 
             echo "start proxy in Terminal"
         elif [ $2 = "off" ]; then
             unset http_proxy;unset https_proxy;
-            unset ftp_proxy;unset no_proxy;
+            unset ftp_proxy;unset all_proxy;unset no_proxy;
             echo "close proxy in Terminal"
         else
             echo command $1 $2 not exist
@@ -120,10 +123,6 @@ myclash()
                 "${MYCLASH_ROOT_PWD}/venv/bin/python3" -m scripts.tui ${2:+$2}
             ;;
         esac
-        ;;
-    'tui')
-        PYTHONPATH="${MYCLASH_ROOT_PWD}" \
-            ${MYCLASH_ROOT_PWD}/venv/bin/python3 -m scripts.tui ${2:+$2}
         ;;
     'share')
         case $2 in
@@ -178,6 +177,19 @@ myclash()
             ;;
         esac
         ;;
+    'docker-proxy')
+        case $2 in
+        'update')
+            bash "${MYCLASH_ROOT_PWD}/scripts/tools/myclash_docker_proxy_update.sh"
+            ;;
+        *)
+            echo "用法: myclash docker-proxy update"
+            echo "  按 user_config 的 HTTP 端口写入 dockerd 的 systemd drop-in，并 reload + restart。"
+            echo "  自动识别 rootless（用户单元）与 rootful（需 sudo）。"
+            echo "  强制目标: MYCLASH_DOCKER_PROXY_TARGET=user|system"
+            ;;
+        esac
+        ;;
     'v2ray')
         case $2 in
         'ui')
@@ -213,12 +225,13 @@ myclash()
         echo "      v2ray ui | v2ray log  — v2ray 选节点；log 与 service get_logs 相同（journalctl）"
         echo "      share serve [端口] | share stop | share status"
         echo "          本机 HTTP 提供 slave_bootstrap.sh（局域网 curl 安装 Slave）"
+        echo "      docker-proxy update  — docker pull 走本机 Clash HTTP 代理（systemd drop-in）"
         echo "======================"
         echo "Remark"
         echo "[command] service 负责管理 MCS 内核（systemd --user，无需 sudo）"
         echo "[option] 安装后对用户会话 enable，可手动 start/stop/restart；无登录会话的机器见 loginctl enable-linger"
         echo "[option] update_subcribe 选项可以更新代理"
-        echo "[option] reload_kernel 通知 mcs_manager 按 user_config 重拉 Clash/v2ray 子进程（默认 http://127.0.0.1:9091）"
+        echo "[option] reload_kernel 通知 mcs_manager 重拉 Clash/v2ray 子进程（端口见 cache/current_mcs_port.txt；池为 mcs_api_start_port–mcs_api_end_port）"
         echo "[option] get_logs / myclash log  — journalctl 用户服务日志（含 mihomo/v2ray 标准输出）"
         echo "[command] window  命令管理在图形化应用(如 chrome )[on/off]代理"
         echo "[command] shell   命令管理在当前终端窗口[on/off]代理,默认值为config.yaml中的shell_proxy_default参数"
@@ -280,13 +293,16 @@ _myclash()
 
     case $cmd in
     'myclash')
-        COMPREPLY=( $(compgen -W 'service window shell log help cfg change_subscribe ui tui share v2ray' -- $cur) )
+        COMPREPLY=( $(compgen -W 'service window shell log help cfg change_subscribe ui tui share docker-proxy v2ray' -- $cur) )
         ;;
     'v2ray')
         COMPREPLY=( $(compgen -W 'ui log' -- $cur) )
         ;;
     'share')
         COMPREPLY=( $(compgen -W 'serve stop status' -- $cur) )
+        ;;
+    'docker-proxy')
+        COMPREPLY=( $(compgen -W 'update' -- $cur) )
         ;;
     'service')
         COMPREPLY=( $(compgen -W 'start stop restart status get_logs update_subcribe reload_kernel' -- $cur) ) 

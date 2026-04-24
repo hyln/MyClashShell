@@ -93,21 +93,15 @@ log-level: info
 # rest api 端口，默认为 9090
 external-controller: :9090
 ```
-更改后运行 `myclash cfg update`完成更改
+更改后运行 `myclash service restart` 使内核与配置一致。
 
-### 添加自定义规则
-
-我们一般不会手动新增节点，代理组变化的可能性也非常小，但是可能需要自定义部分**规则**
-
-
-
-更改后运行 `myclash cfg update`完成更改
 
 
 ## 常见问题
+
 ### ssh github 走代理
 
-一个常用的配置是
+一个常用的配置是 以7890端口为例
 ```bash
 Host github.com
     User git
@@ -120,26 +114,16 @@ Host github.com
 
 [Docker的三种网络代理配置 &middot; 零壹軒·笔记](https://note.qidong.name/2020/05/docker-proxy/)
 
-在执行`docker pull`时，是由守护进程`dockerd`来执行。 因此，代理需要配在`dockerd`的环境中。 而这个环境，则是受`systemd`所管控，因此实际是`systemd`的配置。
+`docker pull` 由守护进程 `dockerd` 执行，代理需写在 **dockerd 的 systemd 环境**里。一条命令按 `user_config.yaml` 里的 **HTTP 端口**（默认 7890）写入 drop-in 并 `daemon-reload` + 重启 Docker：
 
 ```bash
-sudo mkdir -p /etc/systemd/system/docker.service.d
-sudo vim /etc/systemd/system/docker.service.d/proxy.conf
+myclash docker-proxy update
 ```
 
-在这个`proxy.conf`文件（可以是任意`*.conf`的形式）中，添加以下内容：
+- **rootful**：写入 `/etc/systemd/system/docker.service.d/`，会提示 **sudo**。
+- **rootless**：写入 `~/.config/systemd/user/docker.service.d/`，使用 **`systemctl --user`**，无需 sudo。
 
-```
-[Service]
-Environment="HTTP_PROXY=http://127.0.0.1:7890/"
-Environment="HTTPS_PROXY=http://127.0.0.1:7890/"
-```
-
-```bash
-# 最后重启 Docker 服务
-systemctl daemon-reload
-systemctl restart docker
-```
+若当前连不上 daemon、又同时装了两种 Docker，脚本可能默认系统级；可强制：`export MYCLASH_DOCKER_PROXY_TARGET=user` 或 `=system` 后再执行。可选 `MYCLASH_DOCKER_NO_PROXY` 覆盖默认的 `NO_PROXY`。
 
 ### 在 docker 容器中使用 clash
 

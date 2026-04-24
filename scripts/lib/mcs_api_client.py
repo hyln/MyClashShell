@@ -1,7 +1,11 @@
 """调用 ``mcs_manager`` 内置 Flask 控制面。
 
-监听地址与端口优先读 ``user_config.yaml`` 的 ``mcs_api_host`` / ``mcs_api_port``；
-若设置环境变量 ``MYCLASH_MCS_API_HOST`` / ``MYCLASH_MCS_API_PORT`` 则覆盖 YAML。
+监听地址与端口池（**不可**再指定单一 ``mcs_api_port``）：
+
+- **YAML**：``mcs_api_start_port`` / ``mcs_api_end_port``（含端点）定义池；缺省 ``29190``–``29200``。
+- **服务端**：若设置 ``MYCLASH_MCS_API_PORT`` 则强制使用该端口；否则在池内选首个可绑定端口，并写入
+  ``cache/current_mcs_port.txt``（与 ``current_sub.txt`` 类似，供客户端发现）。
+- **客户端**：``MYCLASH_MCS_API_PORT`` > ``cache/current_mcs_port.txt`` > 池的起始端口（无缓存时的回退）。
 """
 
 from __future__ import annotations
@@ -9,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import socket
 import time
 import urllib.error
 import urllib.request
@@ -16,31 +21,114 @@ from pathlib import Path
 
 import yaml
 
-from scripts.lib.paths import repo_root
+from scripts.lib.paths import download_cache_dir, repo_root
+
+# user_config 未写 mcs_api_start_port / mcs_api_end_port 时的默认池（含端点）
+DEFAULT_MCS_API_START_PORT = 29190
+DEFAULT_MCS_API_END_PORT = 29200
 
 
-def read_mcs_api_bind(root: Path | None = None) -> tuple[str, int]:
-    """返回 ``(host, port)`` 供 ``make_server`` 与 HTTP 客户端共用。"""
+def _current_mcs_port_path(base: Path) -> Path:
+    return download_cache_dir(base) / "current_mcs_port.txt"
+
+
+def read_mcs_port_from_file(root: Path | None = None) -> int | None:
+    """读取 ``cache/current_mcs_port.txt`` 中的端口号；无效或不存在则 ``None``。"""
     base = repo_root() if root is None else root
+    path = _current_mcs_port_path(base)
+    if not path.is_file():
+        return None
+    try:
+        raw = path.read_text(encoding="utf-8").strip()
+        if raw.isdigit():
+            p = int(raw)
+            if 1 <= p <= 65535:
+                return p
+    except OSError:
+        return None
+    return None
+
+
+def write_current_mcs_port_file(root: Path, port: int) -> None:
+    """将当前 mcs_manager 监听端口写入 ``cache/current_mcs_port.txt``。"""
+    d = download_cache_dir(root)
+    d.mkdir(parents=True, exist_ok=True)
+    _current_mcs_port_path(root).write_text(f"{int(port)}\n", encoding="utf-8")
+
+
+def _parse_yaml_port_int(doc: dict, key: str) -> int | None:
+    v = doc.get(key)
+    if isinstance(v, int) and 1 <= v <= 65535:
+        return v
+    if isinstance(v, str) and v.strip().isdigit():
+        p = int(v.strip())
+        if 1 <= p <= 65535:
+            return p
+    return None
+
+
+def _parse_yaml_mcs_host(doc: dict, default: str) -> str:
+    vh = doc.get("mcs_api_host")
+    if isinstance(vh, str) and vh.strip():
+        return vh.strip()
+    return default
+
+
+def _mcs_bind_from_user_config(base: Path) -> tuple[str, int, int]:
+    """单次解析 ``user_config.yaml``：``(mcs_api_host, pool_start, pool_end)``，含端点；``start>end`` 时交换。"""
     host = "127.0.0.1"
-    port = 9091
+    lo, hi = DEFAULT_MCS_API_START_PORT, DEFAULT_MCS_API_END_PORT
     uc = base / "user_config.yaml"
     if uc.is_file():
         try:
             doc = yaml.safe_load(uc.read_text(encoding="utf-8"))
             if isinstance(doc, dict):
-                vh = doc.get("mcs_api_host")
-                if isinstance(vh, str) and vh.strip():
-                    host = vh.strip()
-                vp = doc.get("mcs_api_port")
-                if isinstance(vp, int) and 1 <= vp <= 65535:
-                    port = vp
-                elif isinstance(vp, str) and vp.strip().isdigit():
-                    p = int(vp.strip())
-                    if 1 <= p <= 65535:
-                        port = p
+                host = _parse_yaml_mcs_host(doc, host)
+                a = _parse_yaml_port_int(doc, "mcs_api_start_port")
+                b = _parse_yaml_port_int(doc, "mcs_api_end_port")
+                if a is not None:
+                    lo = a
+                if b is not None:
+                    hi = b
         except Exception:  # noqa: BLE001
             pass
+    if lo > hi:
+        lo, hi = hi, lo
+    return host, lo, hi
+
+
+def read_mcs_api_port_range(root: Path | None = None) -> tuple[int, int]:
+    """MCS API 端口池 ``(start, end)``，与 :func:`allocate_mcs_listen_port` 使用的范围一致。"""
+    base = repo_root() if root is None else root
+    _h, lo, hi = _mcs_bind_from_user_config(base)
+    return lo, hi
+
+
+def _load_user_config_mcs_host_and_range(base: Path) -> tuple[str, int, int]:
+    """``(host, pool_start, pool_end)``。"""
+    return _mcs_bind_from_user_config(base)
+
+
+def _tcp_bind_possible(host: str, port: int) -> bool:
+    """检测 ``host:port`` 是否可被当前进程绑定（与 Werkzeug 监听族一致）。"""
+    try:
+        for res in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM):
+            af, socktype, proto, _, sockaddr = res
+            try:
+                with socket.socket(af, socktype, proto) as s:
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    s.bind(sockaddr)
+                    return True
+            except OSError:
+                continue
+    except OSError:
+        return False
+    return False
+
+
+def allocate_mcs_listen_port(root: Path) -> tuple[str, int]:
+    """供 ``mcs_manager`` 选择监听端口：``MYCLASH_MCS_API_PORT`` > 配置端口池内首个空闲。"""
+    host, pool_lo, pool_hi = _load_user_config_mcs_host_and_range(root)
     eh = os.environ.get("MYCLASH_MCS_API_HOST", "").strip()
     if eh:
         host = eh
@@ -49,10 +137,37 @@ def read_mcs_api_bind(root: Path | None = None) -> tuple[str, int]:
         try:
             p = int(ep)
             if 1 <= p <= 65535:
-                port = p
+                return host, p
         except ValueError:
             pass
-    return host, port
+    for p in range(pool_lo, pool_hi + 1):
+        if _tcp_bind_possible(host, p):
+            return host, p
+    raise SystemExit(
+        f"mcs_manager: 端口池 {pool_lo}-{pool_hi} 均被占用；可扩大 mcs_api_start_port/mcs_api_end_port"
+        " 或设置环境变量 MYCLASH_MCS_API_PORT"
+    )
+
+
+def read_mcs_api_bind(root: Path | None = None) -> tuple[str, int]:
+    """返回 ``(host, port)``：客户端连接 mcs_manager 时使用。"""
+    base = repo_root() if root is None else root
+    host, pool_lo, _pool_hi = _load_user_config_mcs_host_and_range(base)
+    eh = os.environ.get("MYCLASH_MCS_API_HOST", "").strip()
+    if eh:
+        host = eh
+    ep = os.environ.get("MYCLASH_MCS_API_PORT", "").strip()
+    if ep:
+        try:
+            p = int(ep)
+            if 1 <= p <= 65535:
+                return host, p
+        except ValueError:
+            pass
+    fp = read_mcs_port_from_file(base)
+    if fp is not None:
+        return host, fp
+    return host, pool_lo
 
 
 def _auth_headers() -> dict[str, str]:
@@ -169,9 +284,11 @@ def wait_kernel_ready(
     return False, last_err or "timeout"
 
 
-def request_sync_meta(*, logger: logging.Logger | None = None, timeout: float = 6.0) -> bool:
+def request_sync_meta(
+    *, logger: logging.Logger | None = None, timeout: float = 6.0, root: Path | None = None
+) -> bool:
     """``POST /kernel/sync_meta``：刷新 ``cache/current_sub.txt``。"""
-    url = f"{_mcs_base_url(None)}/kernel/sync_meta"
+    url = f"{_mcs_base_url(root)}/kernel/sync_meta"
     req = urllib.request.Request(url, method="POST", data=b"{}", headers=_post_json_headers())
     try:
         with _opener_no_env_proxy().open(req, timeout=timeout) as resp:

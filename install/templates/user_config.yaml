@@ -13,7 +13,9 @@ default_subscribe: "DEFAULT"
 
 # mcs_manager 本地控制 HTTP（GET /kernel/status、reload_kernel 等）；修改后需重启 mcs 服务
 mcs_api_host: 127.0.0.1
-mcs_api_port: 9091
+# 端口池（含端点）；在池内选首个空闲端口，实际端口写入 cache/current_mcs_port.txt
+mcs_api_start_port: 29190
+mcs_api_end_port: 29200
 
 # 订阅合并后，用该文件的 rules 整段替换提供商自带 rules（保留订阅里的 proxies / proxy-groups）。
 # 路径相对 MYCLASH_ROOT；删除本项或留空则不替换。
