@@ -422,6 +422,7 @@ class ClashTuiApp(App[None]):
                                     can_focus=False,
                                     get_current_view=self._current_view,
                                     on_proxy_move_selection_delta=self._proxy_move_selection_delta,
+                                    on_proxy_pick_by_name=self._activate_proxy_by_name,
                                 ):
                                     yield ProxyNodeRows(
                                         id="proxy-rows",
@@ -812,11 +813,21 @@ class ClashTuiApp(App[None]):
     def _sync_proxy_chrome(self) -> None:
         visible = self._state.display_nodes()
         status = "testing…" if self._state.testing else "ready"
-        cur = self._state.current_node
-        cur_part = f"current {cur}" if cur else ""
-        parts = [f"{len(visible)} nodes", status]
-        if cur_part:
-            parts.insert(0, cur_part)
+        cur = (self._state.current_node or "").strip()
+        idx = self._state.selected_idx
+        parts: list[str] = []
+        if visible and 0 <= idx < len(visible):
+            focus_name = visible[idx]
+            if focus_name == cur:
+                parts.append(f"光标/生效: {focus_name}")
+            else:
+                parts.append(f"光标: {focus_name}")
+                if cur:
+                    parts.append(f"生效: {cur}")
+        elif cur:
+            parts.append(f"生效: {cur}")
+        parts.append(f"{len(visible)} nodes")
+        parts.append(status)
         line = "  |  ".join(parts)
         self.query_one("#group-line", Static).update(line)
 
@@ -943,6 +954,8 @@ class ClashTuiApp(App[None]):
             return False
         self._state.selected_idx = new_idx
         self._refresh_card_contents()
+        self._sync_proxy_chrome()
+        self._sync_main_footer()
         self.call_after_refresh(self._scroll_to_selection)
         return True
 
@@ -1018,16 +1031,16 @@ class ClashTuiApp(App[None]):
         if self._current_view() == "view-proxies":
             self.query_one("#proxy-rows", Vertical).focus()
 
-    @on(Button.Pressed, ".proxy-node-btn")
-    def on_proxy_node_pressed(self, event: Button.Pressed) -> None:
+    def _activate_proxy_by_name(self, name: str) -> None:
         if self._current_view() != "view-proxies":
             return
-        wid = event.button.id or ""
-        if not wid.startswith("pb-"):
+        visible = self._state.display_nodes()
+        if name not in visible:
             return
-        try:
-            idx = int(wid[3:])
-        except ValueError:
+        self._activate_proxy_index(visible.index(name))
+
+    def _activate_proxy_index(self, idx: int) -> None:
+        if self._current_view() != "view-proxies":
             return
         visible = self._state.display_nodes()
         if not (0 <= idx < len(visible)):

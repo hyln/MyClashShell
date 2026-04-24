@@ -1,5 +1,5 @@
 #!/usr/bin/python
-"""``myclash service update_subcribe`` 调用的订阅更新逻辑。
+"""``myclash service update_subscribe`` 调用的订阅更新逻辑。
 
 阶段 1 — 更新 **全部** ``subscribes`` 到 cache（与 ``default_subscribe`` 无关）：
 

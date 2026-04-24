@@ -4,11 +4,14 @@
 - 子进程由 ``user_config.yaml`` 的 ``default_subscribe`` + ``subscribes[].backend`` 决定。
 - 本地 HTTP API（Flask + Werkzeug）在主线程上 ``serve_forever``，
   避免在守护线程里 ``app.run`` 导致对端 ``RemoteDisconnected``。
-  监听地址与端口在 ``user_config.yaml`` 的 ``mcs_api_host`` / ``mcs_api_port``（缺省同 ``127.0.0.1:9091``）。
+  监听地址在 ``user_config.yaml`` 的 ``mcs_api_host``（缺省 ``127.0.0.1``）。端口池由
+  ``mcs_api_start_port`` / ``mcs_api_end_port``（含端点，缺省 ``29190``–``29200``）定义；不可再指定
+  单一 ``mcs_api_port``。在池内取首个可绑定端口，并写入 ``cache/current_mcs_port.txt`` 供客户端发现。
+  若设置 ``MYCLASH_MCS_API_PORT`` 则强制使用该端口（覆盖池）。
 
 环境变量：
 
-- ``MYCLASH_MCS_API_HOST`` / ``MYCLASH_MCS_API_PORT``：若设置则覆盖 YAML 中的上述两项。
+- ``MYCLASH_MCS_API_HOST`` / ``MYCLASH_MCS_API_PORT``：覆盖 YAML 中的主机 / 强制监听端口。
 - ``MYCLASH_MCS_API_TOKEN``：若设置，受保护接口须带 ``Authorization: Bearer <token>``。
 - ``GET /kernel/status``：含 ``default_subscribe``、``backend_from_config``、``backend_running`` 等。
 - ``POST /kernel/sync_meta``：仅根据 ``user_config.yaml`` 重写 ``cache/current_sub.txt``（不重启子进程）。
@@ -43,7 +46,7 @@ except ImportError:
     )
     sys.exit(1)
 
-from scripts.lib.mcs_api_client import read_mcs_api_bind  # noqa: E402
+from scripts.lib.mcs_api_client import allocate_mcs_listen_port, write_current_mcs_port_file  # noqa: E402
 from scripts.lib.paths import clash_executable, download_cache_dir, mcs_configs_dir, v2ray_executable  # noqa: E402
 from scripts.lib.subscribe import parse_subscribes, resolve_default_subscribe_name  # noqa: E402
 
@@ -270,7 +273,11 @@ def main() -> int:
     sup = threading.Thread(target=mgr.supervisor_loop, daemon=True, name="mcs-supervisor")
     sup.start()
 
-    host, port = read_mcs_api_bind(root)
+    host, port = allocate_mcs_listen_port(root)
+    try:
+        write_current_mcs_port_file(root, port)
+    except OSError as exc:
+        print(f"mcs_manager: 写入 cache/current_mcs_port.txt 失败: {exc}", file=sys.stderr)
 
     app = _make_flask_app(mgr)
     _httpd = make_server(host, port, app, threaded=True)
