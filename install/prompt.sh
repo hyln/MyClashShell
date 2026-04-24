@@ -17,7 +17,7 @@ echo_guider_after_success(){
     echo "4.在本终端执行 source ~/.bashrc，或重新打开终端，使 MYCLASH_ROOT_PWD 与 myclash 命令生效"
     echo "5.现在，你可以直接输入 myclash 或者 myclash help 学习如何使用了"
     echo "---更新订阅---"
-    echo "6.config.yaml设置完成后,可以通过 myclash service update_subcribe 更新订阅"
+    echo "6.config.yaml设置完成后,可以通过 myclash service update_subscribe 更新订阅"
     echo_R "注意:此安装完成后，MyClashShell文件夹不能删除"
 }
 

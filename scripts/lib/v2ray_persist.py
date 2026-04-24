@@ -56,7 +56,7 @@ def resolve_v2ray_default_profile(root: Path) -> tuple[str, dict[str, Any], Path
 def load_proxy_outbounds_from_cache(root: Path, profile_name: str) -> list[dict[str, Any]]:
     cache_json = download_cache_dir(root) / f"{profile_name}.json"
     if not cache_json.is_file():
-        raise ValueError(f"未找到 {cache_json}，请先执行 myclash service update_subcribe")
+        raise ValueError(f"未找到 {cache_json}，请先执行 myclash service update_subscribe")
     try:
         data = json.loads(cache_json.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as e:

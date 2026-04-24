@@ -46,7 +46,7 @@ if __name__=="__main__":
 
     # read yaml and find avilable cfg
     download_configs = []
-    default_subcribe = None
+    default_subscribe = None
 
 
     profile_names = []

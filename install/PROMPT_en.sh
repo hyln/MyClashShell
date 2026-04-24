@@ -17,6 +17,6 @@ echo_guider_after_success(){
     echo "4. Run source ~/.bashrc in this terminal (or open a new terminal) so MYCLASH_ROOT_PWD and myclash are available"
     echo "5. Now you can type myclash or myclash help"
     echo "---Update Subscription---"
-    echo "6. After config.yaml is ready, update the subscription with: myclash service update_subcribe"
+    echo "6. After config.yaml is ready, update the subscription with: myclash service update_subscribe"
     echo_R "Note: After the installation is complete, the MyClashShell folder cannot be deleted"
 }

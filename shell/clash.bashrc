@@ -43,7 +43,7 @@ myclash()
                 return 1
             fi
             journalctl --user -u myclash.service -n 200 -f "${@:3}"
-        elif [ $2 = "update_subcribe" ]; then
+        elif [ $2 = "update_subscribe" ]; then
             myclash shell off
             ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/update_proxy_config.py
             myclash shell on
@@ -213,7 +213,7 @@ myclash()
         echo "myclash [command*] [option*]"
         echo "Command:"
         echo "      log [journalctl参数…]  — 跟踪 myclash.service（mcs + mihomo/v2ray 子进程）"
-        echo "      service [ start/stop/restart/status/get_logs/update_subcribe/reload_kernel ]"
+        echo "      service [ start/stop/restart/status/get_logs/update_subscribe/reload_kernel ]"
         echo "      window [ on/off ]"
         echo "      shell [ on/off ]"
         echo "      cfg"
@@ -227,7 +227,7 @@ myclash()
         echo "Remark"
         echo "[command] service 负责管理 MCS 内核（systemd --user，无需 sudo）"
         echo "[option] 安装后对用户会话 enable，可手动 start/stop/restart；无登录会话的机器见 loginctl enable-linger"
-        echo "[option] update_subcribe 选项可以更新代理"
+        echo "[option] update_subscribe 选项可以更新代理"
         echo "[option] reload_kernel 通知 mcs_manager 重拉 Clash/v2ray 子进程（端口见 cache/current_mcs_port.txt；池为 mcs_api_start_port–mcs_api_end_port）"
         echo "[option] get_logs / myclash log  — journalctl 用户服务日志（含 mihomo/v2ray 标准输出）"
         echo "[command] window  命令管理在图形化应用(如 chrome )[on/off]代理"
@@ -302,7 +302,7 @@ _myclash()
         COMPREPLY=( $(compgen -W 'update' -- $cur) )
         ;;
     'service')
-        COMPREPLY=( $(compgen -W 'start stop restart status get_logs update_subcribe reload_kernel' -- $cur) ) 
+        COMPREPLY=( $(compgen -W 'start stop restart status get_logs update_subscribe reload_kernel' -- $cur) ) 
         ;;
     'window')
         COMPREPLY=( $(compgen -W 'on off' -- $cur) ) 
