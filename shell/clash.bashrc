@@ -102,9 +102,6 @@ myclash()
         fi
         journalctl --user -u myclash.service -n 200 -f "${@:2}"
         ;;
-    'cfg')
-        ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/myclash.py $1 $2
-        ;;
     'change_subscribe')
         ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/change_sub.py $2
         ;;

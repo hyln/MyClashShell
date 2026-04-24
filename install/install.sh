@@ -88,6 +88,9 @@ mkvenv() {
 
 	"${MYCLASH_ROOT_PWD}/venv/bin/pip" install --upgrade pip >/dev/null 2>&1
 
+	"${MYCLASH_ROOT_PWD}/venv/bin/pip" install pyyaml requests
+
+
 	echo "✅ 完成！当前环境: $ENV_DIR"
 }
 
