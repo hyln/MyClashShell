@@ -3,17 +3,54 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
 import requests
+import yaml
 
 from .config_api import normalize_runtime_config
 
 
+def _normalize_api_base(raw: str) -> str:
+    s = (raw or "").strip()
+    if not s:
+        return "http://127.0.0.1:9090"
+    if s.startswith("http://") or s.startswith("https://"):
+        return s.rstrip("/")
+    if s.startswith(":"):
+        return f"http://127.0.0.1{s}".rstrip("/")
+    return f"http://{s}".rstrip("/")
+
+
+def _api_base_from_user_config() -> str | None:
+    root = os.environ.get("MYCLASH_ROOT_PWD", "").strip()
+    if not root:
+        return None
+    uc = Path(root) / "user_config.yaml"
+    if not uc.is_file():
+        return None
+    try:
+        doc = yaml.safe_load(uc.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(doc, dict):
+        return None
+    ec = doc.get("external-controller")
+    if isinstance(ec, str) and ec.strip():
+        return _normalize_api_base(ec)
+    return None
+
+
 class ClashClient:
     def __init__(self):
-        self.base_url = os.getenv("MYCLASH_API", "http://127.0.0.1:9090").rstrip("/")
+        # 优先级：MYCLASH_API > user_config external-controller > 默认 127.0.0.1:9090
+        env_api = os.getenv("MYCLASH_API", "").strip()
+        if env_api:
+            self.base_url = _normalize_api_base(env_api)
+        else:
+            self.base_url = _api_base_from_user_config() or "http://127.0.0.1:9090"
         self.secret = os.getenv("MYCLASH_SECRET", "").strip()
 
     def _headers(self) -> dict[str, str]:

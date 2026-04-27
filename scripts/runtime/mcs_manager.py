@@ -4,9 +4,10 @@
 - 子进程由 ``user_config.yaml`` 的 ``default_subscribe`` + ``subscribes[].backend`` 决定。
 - 本地 HTTP API（Flask + Werkzeug）在主线程上 ``serve_forever``，
   避免在守护线程里 ``app.run`` 导致对端 ``RemoteDisconnected``。
-  监听地址在 ``user_config.yaml`` 的 ``mcs_api_host``（缺省 ``127.0.0.1``）。端口池由
-  ``mcs_api_start_port`` / ``mcs_api_end_port``（含端点，缺省 ``29190``–``29200``）定义；不可再指定
-  单一 ``mcs_api_port``。在池内取首个可绑定端口，并写入 ``cache/current_mcs_port.txt`` 供客户端发现。
+  监听地址在 ``user_config.yaml`` 的 ``mcs_api_host``（缺省 ``127.0.0.1``）。端口池优先读取
+  ``mcs_api_port_range``（含端点，缺省 ``29190``–``29290``；兼容旧键 ``mcs_api_start_port`` /
+  ``mcs_api_end_port``）；不可再指定单一 ``mcs_api_port``。在池内取首个可绑定端口，并写入
+  ``cache/current_mcs_port.txt`` 供客户端发现。
   若设置 ``MYCLASH_MCS_API_PORT`` 则强制使用该端口（覆盖池）。
 
 环境变量：

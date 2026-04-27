@@ -14,8 +14,7 @@ default_subscribe: "DEFAULT"
 # mcs_manager 本地控制 HTTP（GET /kernel/status、reload_kernel 等）；修改后需重启 mcs 服务
 mcs_api_host: 127.0.0.1
 # 端口池（含端点）；在池内选首个空闲端口，实际端口写入 cache/current_mcs_port.txt
-mcs_api_start_port: 29190
-mcs_api_end_port: 29200
+mcs_api_port_range: [29190, 29290]
 
 # 订阅合并后，用该文件的 rules 整段替换提供商自带 rules（保留订阅里的 proxies / proxy-groups）。
 # 路径相对 MYCLASH_ROOT；删除本项或留空则不替换。
@@ -26,10 +25,14 @@ slim_proxy_groups: true
 
 ################### clash / mihomo 监听与 API（合并订阅时从本文件顶层覆盖订阅同名字段）############
 ## 修改后需重新合并配置：myclash service update_subcribe
-port: 7890
-socks-port: 7891
+# 首次生成 user_config.yaml 时，将在该范围内随机选取可用端口写入 port/socks-port
+proxy_port_range: [37890, 37990]
+# 仅本地 API：首次生成时将在范围内随机选取可用端口，写入 external-controller
+clash_external_port_range: [39090, 39190]
+port: 37890
+socks-port: 37891
 allow-lan: true
 mode: Rule
 log-level: info
-external-controller: :9090
+external-controller: 127.0.0.1:39090
 ############################################

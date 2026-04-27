@@ -100,8 +100,8 @@ allow-lan: true
 mode: Rule
 # info / debug / 
 log-level: info
-# rest api 端口，默认为 9090
-external-controller: :9090
+# rest api 仅本机监听（示例）
+external-controller: 127.0.0.1:9090
 ```
 更改后运行 `myclash service restart` 使内核与配置一致。
 
