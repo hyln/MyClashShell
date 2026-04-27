@@ -30,7 +30,7 @@ cover_configs = ["port" , "socks-port", "mode", "allow-lan", "log-level", "exter
 # allow-lan: true
 # mode: Rule
 # log-level: info
-# external-controller: :9090
+# external-controller: 127.0.0.1:9090
 
 for key, value in custom_configs.items():
     if key in cover_configs:

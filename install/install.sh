@@ -132,6 +132,8 @@ install_mcs() {
 			"${MYCLASH_ROOT_PWD}/user_config.yaml" \
 			"${version}"
 		chmod u+rw "${MYCLASH_ROOT_PWD}/user_config.yaml"
+		"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/runtime/init_user_config_ports.py" \
+			"${MYCLASH_ROOT_PWD}/user_config.yaml"
 	else
 		config_version=""
 		if grep -q '^version:' "${MYCLASH_ROOT_PWD}/user_config.yaml"; then
@@ -145,6 +147,8 @@ install_mcs() {
 				"${MYCLASH_ROOT_PWD}/user_config.yaml" \
 				"${version}"
 			chmod u+rw "${MYCLASH_ROOT_PWD}/user_config.yaml"
+			"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/runtime/init_user_config_ports.py" \
+				"${MYCLASH_ROOT_PWD}/user_config.yaml"
 		fi
 	fi
 

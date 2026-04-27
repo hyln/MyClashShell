@@ -2,7 +2,8 @@
 
 监听地址与端口池（**不可**再指定单一 ``mcs_api_port``）：
 
-- **YAML**：``mcs_api_start_port`` / ``mcs_api_end_port``（含端点）定义池；缺省 ``29190``–``29200``。
+- **YAML**：优先读取 ``mcs_api_port_range: [start, end]``（含端点）；
+  兼容旧键 ``mcs_api_start_port`` / ``mcs_api_end_port``。缺省 ``29190``–``29290``。
 - **服务端**：若设置 ``MYCLASH_MCS_API_PORT`` 则强制使用该端口；否则在池内选首个可绑定端口，并写入
   ``cache/current_mcs_port.txt``（与 ``current_sub.txt`` 类似，供客户端发现）。
 - **客户端**：``MYCLASH_MCS_API_PORT`` > ``cache/current_mcs_port.txt`` > 池的起始端口（无缓存时的回退）。
@@ -23,9 +24,9 @@ import yaml
 
 from scripts.lib.paths import download_cache_dir, repo_root
 
-# user_config 未写 mcs_api_start_port / mcs_api_end_port 时的默认池（含端点）
+# user_config 未写 mcs_api_port_range 时的默认池（含端点）
 DEFAULT_MCS_API_START_PORT = 29190
-DEFAULT_MCS_API_END_PORT = 29200
+DEFAULT_MCS_API_END_PORT = 29290
 
 
 def _current_mcs_port_path(base: Path) -> Path:
@@ -74,6 +75,17 @@ def _parse_yaml_mcs_host(doc: dict, default: str) -> str:
     return default
 
 
+def _parse_yaml_port_range(doc: dict, key: str) -> tuple[int, int] | None:
+    v = doc.get(key)
+    if not isinstance(v, (list, tuple)) or len(v) != 2:
+        return None
+    a = _parse_yaml_port_int({"x": v[0]}, "x")
+    b = _parse_yaml_port_int({"x": v[1]}, "x")
+    if a is None or b is None:
+        return None
+    return (a, b) if a <= b else (b, a)
+
+
 def _mcs_bind_from_user_config(base: Path) -> tuple[str, int, int]:
     """单次解析 ``user_config.yaml``：``(mcs_api_host, pool_start, pool_end)``，含端点；``start>end`` 时交换。"""
     host = "127.0.0.1"
@@ -84,12 +96,16 @@ def _mcs_bind_from_user_config(base: Path) -> tuple[str, int, int]:
             doc = yaml.safe_load(uc.read_text(encoding="utf-8"))
             if isinstance(doc, dict):
                 host = _parse_yaml_mcs_host(doc, host)
-                a = _parse_yaml_port_int(doc, "mcs_api_start_port")
-                b = _parse_yaml_port_int(doc, "mcs_api_end_port")
-                if a is not None:
-                    lo = a
-                if b is not None:
-                    hi = b
+                rng = _parse_yaml_port_range(doc, "mcs_api_port_range")
+                if rng is not None:
+                    lo, hi = rng
+                else:
+                    a = _parse_yaml_port_int(doc, "mcs_api_start_port")
+                    b = _parse_yaml_port_int(doc, "mcs_api_end_port")
+                    if a is not None:
+                        lo = a
+                    if b is not None:
+                        hi = b
         except Exception:  # noqa: BLE001
             pass
     if lo > hi:
@@ -144,7 +160,7 @@ def allocate_mcs_listen_port(root: Path) -> tuple[str, int]:
         if _tcp_bind_possible(host, p):
             return host, p
     raise SystemExit(
-        f"mcs_manager: 端口池 {pool_lo}-{pool_hi} 均被占用；可扩大 mcs_api_start_port/mcs_api_end_port"
+        f"mcs_manager: 端口池 {pool_lo}-{pool_hi} 均被占用；可扩大 mcs_api_port_range"
         " 或设置环境变量 MYCLASH_MCS_API_PORT"
     )
 

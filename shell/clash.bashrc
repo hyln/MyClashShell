@@ -22,6 +22,20 @@ _myclash_socks_port() {
     echo "$p"
 }
 
+_myclash_share_host() {
+    if [ -n "${MYCLASH_SHARE_HOST:-}" ]; then
+        echo "${MYCLASH_SHARE_HOST}"
+        return 0
+    fi
+    local ip=""
+    ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "$ip"
+        return 0
+    fi
+    echo "127.0.0.1"
+}
+
 myclash()
 {
     case $1 in
@@ -80,16 +94,30 @@ myclash()
     'shell')
         if [ $2 = "on" ]; then
             _hp="$(_myclash_http_port)"
+            _sp="$(_myclash_socks_port)"
             export http_proxy=http://127.0.0.1:${_hp}
             export https_proxy=http://127.0.0.1:${_hp}
             export ftp_proxy=http://127.0.0.1:${_hp}
-            export all_proxy=
+            export all_proxy=socks5h://127.0.0.1:${_sp}
             export no_proxy=127.0.0.1,localhost
+            export HTTP_PROXY=http://127.0.0.1:${_hp}
+            export HTTPS_PROXY=http://127.0.0.1:${_hp}
+            export FTP_PROXY=http://127.0.0.1:${_hp}
+            export ALL_PROXY=socks5h://127.0.0.1:${_sp}
+            export NO_PROXY=127.0.0.1,localhost
 
             echo "start proxy in Terminal"
         elif [ $2 = "off" ]; then
-            unset http_proxy;unset https_proxy;
-            unset ftp_proxy;unset all_proxy;unset no_proxy;
+            unset http_proxy;
+            unset https_proxy;
+            unset ftp_proxy;
+            unset all_proxy;
+            unset no_proxy;
+            unset HTTP_PROXY;
+            unset HTTPS_PROXY;
+            unset FTP_PROXY;
+            unset ALL_PROXY;
+            unset NO_PROXY;
             echo "close proxy in Terminal"
         else
             echo command $1 $2 not exist
@@ -123,6 +151,21 @@ myclash()
         ;;
     'share')
         case $2 in
+        ''|'env'|'export')
+            _hp="$(_myclash_http_port)"
+            _sp="$(_myclash_socks_port)"
+            _host="$(_myclash_share_host)"
+            echo "export http_proxy=http://${_host}:${_hp}"
+            echo "export https_proxy=http://${_host}:${_hp}"
+            echo "export ftp_proxy=http://${_host}:${_hp}"
+            echo "export all_proxy=socks5h://${_host}:${_sp}"
+            echo "export no_proxy=127.0.0.1,localhost"
+            echo "export HTTP_PROXY=http://${_host}:${_hp}"
+            echo "export HTTPS_PROXY=http://${_host}:${_hp}"
+            echo "export FTP_PROXY=http://${_host}:${_hp}"
+            echo "export ALL_PROXY=socks5h://${_host}:${_sp}"
+            echo "export NO_PROXY=127.0.0.1,localhost"
+            ;;
         'serve')
             PORT="${3:-${MYCLASH_SLAVE_SERVE_PORT:-8765}}"
             PIDF="${MYCLASH_ROOT_PWD}/tmp/slave_http_server.pid"
@@ -169,7 +212,8 @@ myclash()
             fi
             ;;
         *)
-            echo "用法: myclash share serve [端口] | myclash share stop | myclash share status"
+            echo "用法: myclash share [env|export] | myclash share serve [端口] | myclash share stop | myclash share status"
+            echo "不带参数时，直接输出 export 语句（默认使用首个局域网 IPv4）"
             echo "默认端口 8765；可用环境变量 MYCLASH_SLAVE_SERVE_PORT / MYCLASH_SLAVE_SERVE_BIND"
             ;;
         esac
@@ -220,15 +264,15 @@ myclash()
         echo "      ui [proxy_group(optional)]  — 按后端自动打开 Clash TUI 或 v2ray 选节点界面"
         echo "      tui [proxy_group(optional)]  — 仅 Clash（mihomo）TUI，与 ui 在 clash 后端时等价"
         echo "      v2ray ui | v2ray log  — v2ray 选节点；log 与 service get_logs 相同（journalctl）"
-        echo "      share serve [端口] | share stop | share status"
-        echo "          本机 HTTP 提供 slave_bootstrap.sh（局域网 curl 安装 Slave）"
+        echo "      share [env|export] | share serve [端口] | share stop | share status"
+        echo "          share（无参数）直接输出 export 语句；serve 用于提供 slave_bootstrap.sh"
         echo "      docker-proxy update  — docker pull 走本机 Clash HTTP 代理（systemd drop-in）"
         echo "======================"
         echo "Remark"
         echo "[command] service 负责管理 MCS 内核（systemd --user，无需 sudo）"
         echo "[option] 安装后对用户会话 enable，可手动 start/stop/restart；无登录会话的机器见 loginctl enable-linger"
         echo "[option] update_subscribe 选项可以更新代理"
-        echo "[option] reload_kernel 通知 mcs_manager 重拉 Clash/v2ray 子进程（端口见 cache/current_mcs_port.txt；池为 mcs_api_start_port–mcs_api_end_port）"
+        echo "[option] reload_kernel 通知 mcs_manager 重拉 Clash/v2ray 子进程（端口见 cache/current_mcs_port.txt；池为 mcs_api_port_range）"
         echo "[option] get_logs / myclash log  — journalctl 用户服务日志（含 mihomo/v2ray 标准输出）"
         echo "[command] window  命令管理在图形化应用(如 chrome )[on/off]代理"
         echo "[command] shell   命令管理在当前终端窗口[on/off]代理,默认值为config.yaml中的shell_proxy_default参数"
@@ -279,7 +323,7 @@ myclash()
         echo "当前使用配置: $current_config_name"
         echo "你可以通过 myclash help 查看帮助"
         echo "==================================="
-        echo "终端控制面板: myclash ui（或 myclash tui）"
+        echo "终端控制面板: myclash ui"
     esac
     
 }
