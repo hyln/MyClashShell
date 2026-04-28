@@ -3,8 +3,9 @@
 
 子命令:
   install-cache   创建 cache/tmp、安装 pip 依赖、下载 mihomo → cache/clash.gz、Country.mmdb、
+                  geoip.dat / geosite.dat（install/download.yaml 中 ``geoip`` / ``geosite``）、
                   可选下载并解压 v2ray 到 cache/v2ray（供 install.sh 再 cp 到 mcs/bin/）
-  url SECTION [ARCH]  仅打印一条 URL（SECTION 为 mmdb 时不带 ARCH；clash/mihomo/mihoyo 均指向 mihomo 段）
+  url SECTION [ARCH]  仅打印一条 URL（SECTION 为 mmdb / geoip / geosite 时不带 ARCH；clash/mihomo/mihoyo 均指向 mihomo 段）
 
 环境变量 MYCLASH_ROOT_PWD 须指向仓库根。
 """
@@ -76,6 +77,13 @@ def _url_from_doc(data: dict, section: str, arch: str | None) -> str:
     if not isinstance(u, str) or not u.strip():
         raise ValueError(f"{section}.{arch} 无有效 URL")
     return u.strip()
+
+
+def _geo_asset_url(data: dict, key: str) -> str | None:
+    raw = data.get(key)
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return None
 
 
 def _optional_v2ray_url(data: dict, arch: str) -> str | None:
@@ -187,9 +195,35 @@ def cmd_install_cache() -> None:
     else:
         _download_file(_url_from_doc(data, "mmdb", None), mmdb, "Country.mmdb")
 
+    geoip_path = cache / "geoip.dat"
+    if geoip_path.is_file():
+        print("resolve_download: cache/geoip.dat 已存在，跳过")
+    else:
+        gu = _geo_asset_url(data, "geoip")
+        if gu:
+            _download_file(gu, geoip_path, "geoip.dat")
+        else:
+            print(
+                "resolve_download: download.yaml 未配置 geoip，跳过 geoip.dat",
+                file=sys.stderr,
+            )
+
+    geosite_path = cache / "geosite.dat"
+    if geosite_path.is_file():
+        print("resolve_download: cache/geosite.dat 已存在，跳过")
+    else:
+        gs = _geo_asset_url(data, "geosite")
+        if gs:
+            _download_file(gs, geosite_path, "geosite.dat")
+        else:
+            print(
+                "resolve_download: download.yaml 未配置 geosite，跳过 geosite.dat",
+                file=sys.stderr,
+            )
+
     v2_url = _optional_v2ray_url(data, arch)
     if not v2_url:
-        print("resolve_download: 无 v2ray URL，跳过 v2ray", file=sys.stderr)
+        print("resolve_download: 无 v2ray URL，跳过 v2ray 二进制", file=sys.stderr)
         return
 
     shutil.rmtree(cache / "v2ray_unzip", ignore_errors=True)
@@ -220,6 +254,21 @@ def cmd_install_cache() -> None:
 def cmd_url(section: str, arch: str | None) -> None:
     try:
         data = _load_doc(_root())
+        if section == "mmdb":
+            print(_url_from_doc(data, "mmdb", None))
+            return
+        if section == "geoip":
+            gu = _geo_asset_url(data, "geoip")
+            if not gu:
+                raise ValueError("缺少 geoip URL")
+            print(gu)
+            return
+        if section == "geosite":
+            gs = _geo_asset_url(data, "geosite")
+            if not gs:
+                raise ValueError("缺少 geosite URL")
+            print(gs)
+            return
         print(_url_from_doc(data, section, arch))
     except ValueError as exc:
         print(f"resolve_download: {exc}", file=sys.stderr)
@@ -230,12 +279,15 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="install/download.yaml 解析与 cache 下载")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("install-cache", help="下载 mihomo（写入 cache/clash.gz）/ mmdb / v2ray 到 cache/")
+    sub.add_parser(
+        "install-cache",
+        help="下载 mihomo（cache/clash.gz）/ mmdb / geoip.dat / geosite.dat / v2ray 到 cache/",
+    )
 
     p_url = sub.add_parser("url", help="打印单条 URL")
     p_url.add_argument(
         "section",
-        choices=("clash", "mihomo", "mihoyo", "v2ray", "mmdb"),
+        choices=("clash", "mihomo", "mihoyo", "v2ray", "mmdb", "geoip", "geosite"),
     )
     p_url.add_argument(
         "arch",
@@ -247,8 +299,9 @@ def main() -> None:
     if args.cmd == "install-cache":
         cmd_install_cache()
     elif args.cmd == "url":
-        arch = None if args.section == "mmdb" else args.arch
-        if args.section != "mmdb" and not arch:
+        no_arch = args.section in ("mmdb", "geoip", "geosite")
+        arch = None if no_arch else args.arch
+        if not no_arch and not arch:
             print("resolve_download: clash/mihomo/mihoyo/v2ray 须指定 arch", file=sys.stderr)
             sys.exit(2)
         cmd_url(args.section, arch)

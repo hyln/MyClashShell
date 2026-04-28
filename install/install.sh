@@ -118,6 +118,13 @@ install_mcs() {
 
 	cp "${MYCLASH_ROOT_PWD}/cache/Country.mmdb" "${MYCLASH_ROOT_PWD}/mcs/configs/Country.mmdb"
 
+	if [ -f "${MYCLASH_ROOT_PWD}/cache/geoip.dat" ]; then
+		cp -f "${MYCLASH_ROOT_PWD}/cache/geoip.dat" "${MYCLASH_ROOT_PWD}/mcs/configs/geoip.dat"
+	fi
+	if [ -f "${MYCLASH_ROOT_PWD}/cache/geosite.dat" ]; then
+		cp -f "${MYCLASH_ROOT_PWD}/cache/geosite.dat" "${MYCLASH_ROOT_PWD}/mcs/configs/geosite.dat"
+	fi
+
 	version=""
 	if [ -f "${MYCLASH_ROOT_PWD}/install/version" ]; then
 		version=$(cat "${MYCLASH_ROOT_PWD}/install/version")

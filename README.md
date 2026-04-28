@@ -6,6 +6,7 @@ ubuntu上使用的命令行proxy设置小工具
 - 常用功能集成
 - 支持多种后端
 - 支持 amd64,arm64,armv7
+- 自带精简的规则
 
 ----
 - [Quickstart](./doc/quick_start.md) 

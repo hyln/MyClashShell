@@ -48,7 +48,13 @@ except ImportError:
     sys.exit(1)
 
 from scripts.lib.mcs_api_client import allocate_mcs_listen_port, write_current_mcs_port_file  # noqa: E402
-from scripts.lib.paths import clash_executable, download_cache_dir, mcs_configs_dir, v2ray_executable  # noqa: E402
+from scripts.lib.paths import (  # noqa: E402
+    clash_executable,
+    download_cache_dir,
+    mcs_configs_dir,
+    v2ray_executable,
+    v2ray_geo_asset_dir,
+)
 from scripts.lib.subscribe import parse_subscribes, resolve_default_subscribe_name  # noqa: E402
 
 _backend: BackendManager | None = None
@@ -139,7 +145,13 @@ class BackendManager:
                 print(f"mcs_manager: v2ray config not found: {cfg}", file=sys.stderr)
                 return None
             cmd = [str(exe), "run", "-config", str(cfg)]
-            return subprocess.Popen(cmd, cwd=str(self._root))
+            env = os.environ.copy()
+            ad = v2ray_geo_asset_dir(self._root)
+            if ad is not None:
+                ads = str(ad)
+                env["V2RAY_LOCATION_ASSET"] = ads
+                env["XRAY_LOCATION_ASSET"] = ads
+            return subprocess.Popen(cmd, cwd=str(self._root), env=env)
         clash = clash_executable(self._root)
         if not clash.is_file():
             print(f"mcs_manager: mihomo 内核未安装（预期路径 mcs/bin/clash）: {clash}", file=sys.stderr)

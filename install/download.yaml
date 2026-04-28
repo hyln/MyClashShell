@@ -9,3 +9,5 @@ v2ray:
   armv7: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/v2-linux-arm32-v7a.zip
   arm64: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/v2-linux-arm64-v8a.zip
 mmdb: https://gitee.com/wangdaochuan/resource_backup/releases/download/cat_dependencies/Country.mmdb
+geoip: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/geoip.dat
+geosite: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/geosite.dat
