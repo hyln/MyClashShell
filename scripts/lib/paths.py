@@ -75,6 +75,15 @@ def download_cache_dir(root: Path | None = None) -> Path:
     return base / "cache"
 
 
+def v2ray_geo_asset_dir(root: Path | None = None) -> Path | None:
+    """若存在 ``geoip.dat`` 与 ``geosite.dat``，返回其所在目录（优先 ``mcs/configs``，否则 ``cache``）。"""
+    base = root if root is not None else repo_root()
+    for d in (mcs_configs_dir(base), download_cache_dir(base)):
+        if (d / "geoip.dat").is_file() and (d / "geosite.dat").is_file():
+            return d
+    return None
+
+
 # Relative to repo root, for HTTP static file mapping (slave_http_server)
 SLAVE_SCRIPT_RELPATHS: tuple[str, ...] = (
     "shell/slave/slave_bootstrap.sh",

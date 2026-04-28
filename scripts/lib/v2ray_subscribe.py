@@ -11,6 +11,9 @@
 多代理 outbound 时默认路由为 **随机 balancer**；若在 ``user_config.yaml`` 设置 ``v2ray_outbound_tag``
 为某一节点 tag，则全部流量固定走该 outbound（与 ``myclash v2ray ui`` 里选用节点等价）。
 
+``mcs/configs`` 或 ``cache`` 下同时存在 ``geoip.dat`` 与 ``geosite.dat`` 时，生成路由会为 **私有网段、国内域名与国内 IP**
+走 ``direct``，其余再走代理（``v2ray_geo_split: false`` 可关闭）。
+
 Supports:
 - JSON body with ``outbounds`` (object or full config) or a JSON array of outbounds
 - Text / base64 subscription: one share link per line (``vmess://``, ``vless://``,
@@ -32,7 +35,7 @@ from typing import Any
 
 import yaml
 
-from scripts.lib.paths import download_cache_dir, mcs_configs_dir
+from scripts.lib.paths import download_cache_dir, mcs_configs_dir, v2ray_geo_asset_dir
 
 
 def _load_v2ray_existing_for_merge(
@@ -548,6 +551,23 @@ def _proxy_inbounds_from_user_config(doc: dict[str, Any]) -> list[dict[str, Any]
     return out
 
 
+def _user_wants_v2ray_geo_split(user_doc: dict[str, Any] | None) -> bool:
+    """``user_config.yaml`` 中 ``v2ray_geo_split: false`` 可关闭分流（即便存在 geoip/geosite）。"""
+    if not isinstance(user_doc, dict):
+        return True
+    return user_doc.get("v2ray_geo_split") is not False
+
+
+def _prepend_v2ray_geo_rules(proxy_tail: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """私有网段与国内域名/IP 直连，其余回落到紧跟其后的代理规则。"""
+    head = [
+        {"type": "field", "ip": ["geoip:private"], "outboundTag": "direct"},
+        {"type": "field", "domain": ["geosite:cn"], "outboundTag": "direct"},
+        {"type": "field", "ip": ["geoip:cn"], "outboundTag": "direct"},
+    ]
+    return head + proxy_tail
+
+
 def _v2ray_fixed_outbound_tag(user_doc: dict[str, Any] | None) -> str:
     """``user_config.yaml`` 中可选 ``v2ray_outbound_tag``：多节点时固定走该 outbound tag；缺省或无效则多节点用随机 balancer。"""
     if not isinstance(user_doc, dict):
@@ -562,6 +582,8 @@ def _assemble_v2ray_config(
     existing: dict[str, Any] | None,
     proxy_outbounds: list[dict[str, Any]],
     user_doc: dict[str, Any] | None = None,
+    *,
+    myclash_root: Path | None = None,
 ) -> dict[str, Any]:
     base = dict(existing) if isinstance(existing, dict) else {}
     log = base.get("log") if isinstance(base.get("log"), dict) else {"loglevel": "warning"}
@@ -579,22 +601,37 @@ def _assemble_v2ray_config(
     ]
     outbounds = [*proxy_outbounds, *tail]
     routing: dict[str, Any] = {"domainStrategy": "AsIs", "rules": []}
+    balancers: list[dict[str, Any]] | None = None
     if len(tags) == 1:
-        routing["rules"] = [{"type": "field", "network": "tcp,udp", "outboundTag": tags[0]}]
+        tail_rules = [{"type": "field", "network": "tcp,udp", "outboundTag": tags[0]}]
     elif len(tags) > 1:
         fixed = _v2ray_fixed_outbound_tag(user_doc)
         tag_set = frozenset(tags)
         if fixed and fixed in tag_set:
-            routing["rules"] = [{"type": "field", "network": "tcp,udp", "outboundTag": fixed}]
+            tail_rules = [{"type": "field", "network": "tcp,udp", "outboundTag": fixed}]
         else:
-            routing["balancers"] = [
+            balancers = [
                 {
                     "tag": "proxy",
                     "selector": tags,
                     "strategy": {"type": "random"},
                 }
             ]
-            routing["rules"] = [{"type": "field", "network": "tcp,udp", "balancerTag": "proxy"}]
+            tail_rules = [{"type": "field", "network": "tcp,udp", "balancerTag": "proxy"}]
+    else:
+        tail_rules = []
+    use_geo = (
+        myclash_root is not None
+        and _user_wants_v2ray_geo_split(user_doc)
+        and v2ray_geo_asset_dir(myclash_root) is not None
+    )
+    if use_geo:
+        routing["domainStrategy"] = "IPIfNonMatch"
+    if balancers:
+        routing["balancers"] = balancers
+    routing["rules"] = (
+        _prepend_v2ray_geo_rules(tail_rules) if use_geo else tail_rules
+    )
     return {"log": log, "inbounds": inb, "outbounds": outbounds, "routing": routing}
 
 
@@ -679,7 +716,9 @@ def write_v2ray_json_from_outbounds(
         myclash_root, profile_name, include_mcs=use_mcs
     )
     user_doc = _load_user_config_doc(myclash_root)
-    cfg = _assemble_v2ray_config(existing, outbounds, user_doc)
+    cfg = _assemble_v2ray_config(
+        existing, outbounds, user_doc, myclash_root=myclash_root
+    )
     cache_path = download_cache_dir(myclash_root) / f"{profile_name}.json"
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
