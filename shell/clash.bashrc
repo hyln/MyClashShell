@@ -36,6 +36,70 @@ _myclash_share_host() {
     echo "127.0.0.1"
 }
 
+_myclash_fmt_dim() { printf '\033[2m%s\033[0m' "$1"; }
+_myclash_fmt_bold() { printf '\033[1m%s\033[0m' "$1"; }
+
+# $1…$6: version, 当前订阅名, HTTP 口, SOCKS 口, allow-lan 文案, 连通性(0=正常 非0=异常)
+_myclash_print_status() {
+    local _ver="$1" _sub="$2" _http="$3" _socks="$4" _lan="$5" _px="$6"
+    local _edge="  ╭──────────────────────────────────────────────────╮"
+    local _mid="  ├──────────────────────────────────────────────────┤"
+    local _bot="  ╰──────────────────────────────────────────────────╯"
+    echo ""
+    echo "$_edge"
+    printf "  │ %b  %b\n" "$(_myclash_fmt_bold "MyClash")" "$(_myclash_fmt_dim "${_ver}")"
+    echo "$_mid"
+    printf "  │ %b  %s\n" "$(_myclash_fmt_dim "当前订阅")    " "${_sub}"
+    printf "  │ %b  %s\n" "$(_myclash_fmt_dim "HTTP 端口")    " "${_http}"
+    printf "  │ %b  %s\n" "$(_myclash_fmt_dim "SOCKS 端口")   " "${_socks}"
+    printf "  │ %b  %s\n" "$(_myclash_fmt_dim "允许局域网")    " "${_lan}"
+    printf '  │ %b  ' "$(_myclash_fmt_dim "连通性")"
+    if [ "${_px}" = 0 ]; then
+        printf "%b\n" "$colors_On_Green 正常 $colors_Normal"
+    else
+        printf "%b\n" "$colors_On_Red 异常 $colors_Normal"
+    fi
+    echo "$_bot"
+    echo ""
+    printf "  %b  myclash help   %b\n" "$(_myclash_fmt_dim "→")" "$(_myclash_fmt_dim "命令列表（与 --help 相同）")"
+    printf "  %b  myclash ui    %b\n" "$(_myclash_fmt_dim "→")" "$(_myclash_fmt_dim "终端节点面板")"
+    echo ""
+}
+
+_myclash_print_help() {
+    cat <<'EOF'
+  ╭──────────────────────────────────────────────────╮
+  │ MyClash · 命令参考                                │
+  ╰──────────────────────────────────────────────────╯
+
+  myclash <命令> [参数 …]
+
+  服务与日志
+    service <子命令>  start | stop | restart | status | get_logs
+                      | update_subscribe | reload_kernel
+    log [journalctl…] 跟踪 myclash.service（mcs + 内核）
+
+  节点界面
+    ui                   clash → mihomo TUI；v2ray → 选节点（视默认订阅）
+    v2ray ui | v2ray log 选节点 / 同 get_logs（journalctl）
+
+  代理
+    shell on|off         当前 shell（默认见 user_config.shell_proxy_default）
+    window on|off        GNOME 等：系统 HTTP/SOCKS
+
+  其它
+    change_subscribe <名>
+    share …              无参 = export；serve [端口] | stop | status
+    docker-proxy update
+
+  提示
+    · update_subscribe：拉订阅并写配置；reload_kernel：只重启 clash/v2ray 子进程
+    · API 端口见 cache/current_mcs_port.txt；池见 user_config.mcs_api_port_range
+    · get_logs / log：journalctl --user；无登录会话：loginctl enable-linger <用户>
+    · 无子命令或非常规参数：打印运行状态摘要；等价于单独执行 myclash（无参数）
+EOF
+}
+
 myclash()
 {
     case $1 in
@@ -253,77 +317,26 @@ myclash()
             ;;
         esac
         ;;
-    'help')
-        echo "myclash [command*] [option*]"
-        echo "Command:"
-        echo "      log [journalctl参数…]  — 跟踪 myclash.service（mcs + mihomo/v2ray 子进程）"
-        echo "      service [ start/stop/restart/status/get_logs/update_subscribe/reload_kernel ]"
-        echo "      window [ on/off ]"
-        echo "      shell [ on/off ]"
-        echo "      cfg"
-        echo "      ui [proxy_group(optional)]  — 按后端自动打开 Clash TUI 或 v2ray 选节点界面"
-        echo "      tui [proxy_group(optional)]  — 仅 Clash（mihomo）TUI，与 ui 在 clash 后端时等价"
-        echo "      v2ray ui | v2ray log  — v2ray 选节点；log 与 service get_logs 相同（journalctl）"
-        echo "      share [env|export] | share serve [端口] | share stop | share status"
-        echo "          share（无参数）直接输出 export 语句；serve 用于提供 slave_bootstrap.sh"
-        echo "      docker-proxy update  — docker pull 走本机 Clash HTTP 代理（systemd drop-in）"
-        echo "======================"
-        echo "Remark"
-        echo "[command] service 负责管理 MCS 内核（systemd --user，无需 sudo）"
-        echo "[option] 安装后对用户会话 enable，可手动 start/stop/restart；无登录会话的机器见 loginctl enable-linger"
-        echo "[option] update_subscribe 选项可以更新代理"
-        echo "[option] reload_kernel 通知 mcs_manager 重拉 Clash/v2ray 子进程（端口见 cache/current_mcs_port.txt；池为 mcs_api_port_range）"
-        echo "[option] get_logs / myclash log  — journalctl 用户服务日志（含 mihomo/v2ray 标准输出）"
-        echo "[command] window  命令管理在图形化应用(如 chrome )[on/off]代理"
-        echo "[command] shell   命令管理在当前终端窗口[on/off]代理,默认值为config.yaml中的shell_proxy_default参数"
-        echo "[command] cfg "
-        echo "[command] ui     终端节点面板（clash / v2ray 自动切换）"
-        echo "[command] tui    同 ui 之 Clash 专用入口"
+    'help'|'--help'|'-h')
+        _myclash_print_help
         ;;
     *)
-        # ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/tools/gui/gui.py
-        echo Myclash $(cat ${MYCLASH_ROOT_PWD}/install/version)
-        # 从 user_config.yaml 读取常用项（与 TUI / 脚本约定一致）
         HTTP_PORT="$(_myclash_http_port)"
         export MYCLASH_HTTP_PORT="${HTTP_PORT}"
+        SOCKS_PORT="$(_myclash_socks_port)"
         _al=$("${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/tools/read_yaml.py" allow-lan 2>/dev/null)
         case "$_al" in
             [Tt]rue|1|[Yy]es|[Oo]n) LAN_TXT="已开启" ;;
             [Ff]alse|0|[Nn]o|[Oo]ff) LAN_TXT="已关闭" ;;
             *) LAN_TXT="未知" ;;
         esac
-        API_BASE="http://127.0.0.1:9090"
-        _ec=$("${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/tools/read_yaml.py" external-controller 2>/dev/null)
-        if [[ -n "$_ec" ]]; then
-            if [[ "$_ec" == http://* || "$_ec" == https://* ]]; then
-                API_BASE="$_ec"
-            elif [[ "$_ec" == :* ]]; then
-                API_BASE="http://127.0.0.1${_ec}"
-            elif [[ "$_ec" == 0.0.0.0:* ]]; then
-                API_BASE="http://127.0.0.1:${_ec#0.0.0.0:}"
-            elif [[ "$_ec" == *:* ]]; then
-                API_BASE="http://${_ec}"
-            fi
-        fi
-        echo "---- Summary ----"
-        echo "HTTP 代理端口: ${HTTP_PORT}  (socks 见 user_config 中 socks-port)"
-        echo "允许局域网 (allow-lan): ${LAN_TXT}"
-        bash ${MYCLASH_ROOT_PWD}/scripts/tools/test_proxy_status.sh > /dev/null
-        if [ $? = 0 ] 
-        then
-            echo -n "当前状态："
-            echo_G "连接正常"
-        else
-            echo -n "当前状态："
-            echo_R "连接失败"
-        fi
-        # current_config_name=$(${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/tools/read_yaml.py default_subscribe)
-        current_config_name=$(cat ${MYCLASH_ROOT_PWD}/cache/current_sub.txt)
+        _ver=$(cat "${MYCLASH_ROOT_PWD}/install/version" 2>/dev/null || echo "?")
+        current_config_name=$(cat "${MYCLASH_ROOT_PWD}/cache/current_sub.txt" 2>/dev/null || echo "—")
 
-        echo "当前使用配置: $current_config_name"
-        echo "你可以通过 myclash help 查看帮助"
-        echo "==================================="
-        echo "终端控制面板: myclash ui"
+        bash "${MYCLASH_ROOT_PWD}/scripts/tools/test_proxy_status.sh" >/dev/null 2>&1
+        _proxy_ok=$?
+
+        _myclash_print_status "${_ver}" "${current_config_name}" "${HTTP_PORT}" "${SOCKS_PORT}" "${LAN_TXT}" "${_proxy_ok}"
     esac
     
 }
@@ -334,7 +347,7 @@ _myclash()
 
     case $cmd in
     'myclash')
-        COMPREPLY=( $(compgen -W 'service window shell log help cfg change_subscribe ui tui share docker-proxy v2ray' -- $cur) )
+        COMPREPLY=( $(compgen -W 'service window shell log help change_subscribe ui share docker-proxy v2ray' -- $cur) )
         ;;
     'v2ray')
         COMPREPLY=( $(compgen -W 'ui log' -- $cur) )

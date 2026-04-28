@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Legacy entry for ``myclash cfg`` (shell/clash.bashrc)."""
+"""Legacy UDP demo（仓库内已无 ``myclash cfg`` 入口）。"""
 
 import socket
 import sys

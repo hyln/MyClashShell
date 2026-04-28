@@ -74,8 +74,15 @@ def current_fixed_tag(doc: dict[str, Any]) -> str | None:
     return None
 
 
+_SKIP_ACTIVE_PROXY_TAGS = frozenset({"direct", "block", "blackhole"})
+
+
 def fixed_routing_outbound_tag_from_mcs(root: Path) -> str | None:
-    """从 ``mcs/configs/v2ray.json`` 解析主路由里固定的 ``outboundTag``；若为 balancer 等多出口则返回 ``None``。"""
+    """从 ``mcs/configs/v2ray.json`` 解析当前「默认代理出口」节点 tag。
+
+    路由靠前规则可能是 geo 分流 ``direct``；应从后往前找 tcp/udp 总出口。
+    若该出口为 ``balancerTag``（多节点随机）则返回 ``None``。
+    """
     p = mcs_configs_dir(root) / "v2ray.json"
     if not p.is_file():
         return None
@@ -88,12 +95,20 @@ def fixed_routing_outbound_tag_from_mcs(root: Path) -> str | None:
     routing = data.get("routing")
     if not isinstance(routing, dict):
         return None
-    for rule in routing.get("rules") or []:
+    rules = routing.get("rules") or []
+    for rule in reversed(rules):
         if not isinstance(rule, dict):
             continue
+        bal = rule.get("balancerTag")
+        if isinstance(bal, str) and bal.strip():
+            return None
         ot = rule.get("outboundTag")
-        if isinstance(ot, str) and ot.strip():
-            return ot.strip()
+        if not isinstance(ot, str) or not ot.strip():
+            continue
+        tag = ot.strip()
+        if tag in _SKIP_ACTIVE_PROXY_TAGS:
+            continue
+        return tag
     return None
 
 
