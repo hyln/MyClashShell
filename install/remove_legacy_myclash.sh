@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 移除旧版 / 当前 MyClashShell 在本机留下的「安装痕迹」（用户级 systemd、shell 片段、
-# 仓库下的 clash|mcs|cache、tmp 内 MCS 生成物、根目录 app.log）。
+# 仓库下的 clash|mcs|cache、旧 tmp/ 与 cache 内生成物、根目录 app.log）。
 #
 # 默认保留：venv/、user_config.yaml、整个仓库目录。
 # 系统级（/etc/systemd、/etc/bash.bashrc）请另行执行: sudo ./install/uninstall_root.sh
@@ -107,7 +107,9 @@ rm_rf "${MYCLASH_ROOT_PWD}/clash"
 rm_rf "${MYCLASH_ROOT_PWD}/mcs"
 rm_rf "${MYCLASH_ROOT_PWD}/cache"
 rm_f "${MYCLASH_ROOT_PWD}/tmp/myclash.service"
+rm_f "${MYCLASH_ROOT_PWD}/cache/myclash.service.gen"
 rm_f "${MYCLASH_ROOT_PWD}/tmp/env_prefix.txt"
+rm_f "${MYCLASH_ROOT_PWD}/cache/env_prefix.txt"
 rm_f "${MYCLASH_ROOT_PWD}/tmp/slave_http_server.pid"
 rm_f "${MYCLASH_ROOT_PWD}/tmp/slave_http_server.log"
 rm_f "${MYCLASH_ROOT_PWD}/app.log"

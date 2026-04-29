@@ -63,7 +63,7 @@ default_subscribe: "DEFAULT"
       # 更新订阅
       myclash service update_subscribe 
     ```
- <!-- - Clash 订阅下载的原始 YAML 与 **`cache/current_sub.txt`**（当前订阅名）均在仓库 **`cache/`**；`tmp/` 仅保留安装过程生成物等，与下载缓存分开。
+ <!-- - Clash 订阅原始 YAML 在 **`cache/subscribe/`**；**`cache/current_sub.txt`**、**`cache/env_prefix.txt`**（写入 ~/.bashrc 的片段）；内核与地理库在 **`cache/download/`**；安装生成的 systemd 单元草稿等在 **`cache/`**。
  - **default_subscribe**：当前默认使用的订阅名，可填 `subscribes` 下任意键；**`DEFAULT`** 表示使用 YAML 中**第一个**订阅。`mcs_manager` 会根据该订阅的 **`backend`** 决定拉起 **Clash** 还是 **v2ray**；切换默认订阅后执行 **`myclash service restart`** 使内核与配置一致。 -->
 
 
@@ -107,10 +107,10 @@ external-controller: 127.0.0.1:9090
 
 ### clash自定义规则
 
-为了简化使用，对于clash订阅，无论下载的定义文件有多少个 proxy-group，均合并成仅有一种，即`Via-Proxy`
+为了简化使用，对于clash订阅，无论下载的定义文件有多少个 proxy-group，均合并成仅有一种，即`A-Via-Proxy`
 
 
-请直接在`user_config.yaml` 的 `rules_template` 所指文件（默认 `install/templates/rules.yaml`）里，为 其他需要的域名追加规则。你可以选择 `Via-Proxy` 或者 `DIRECT`。
+请直接在`user_config.yaml` 的 `rules_template` 所指文件（默认 `install/templates/rules.yaml`）里，为 其他需要的域名追加规则。你可以选择 `A-Via-Proxy` 或者 `DIRECT`。
 
 
 保存后，当执行 `myclash service update_subscribe` 或 

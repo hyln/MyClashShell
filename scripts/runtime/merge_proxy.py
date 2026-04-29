@@ -33,7 +33,7 @@ def clash_overlay_from_user_config(doc: dict | None) -> dict[str, object]:
 
 
 def slim_proxy_groups_enabled(user_cfg: dict | None) -> bool:
-    """user_config.yaml 中 slim_proxy_groups 开启时，合并后仅保留 Via-Proxy 策略组。"""
+    """user_config.yaml 中 slim_proxy_groups 开启时，合并后仅保留 A-Via-Proxy 策略组。"""
     if not user_cfg:
         return False
     return bool(user_cfg.get("slim_proxy_groups"))
@@ -82,10 +82,10 @@ def _apply_rules_template(raw_configs: dict, rules_template_path: str | None) ->
 
 
 def _apply_via_proxy_only_groups(raw_configs: dict) -> None:
-    """用单一 Via-Proxy（select）替换订阅自带 proxy-groups；成员为全部叶子代理名 + DIRECT。"""
+    """用单一 A-Via-Proxy（select）替换订阅自带 proxy-groups；成员为全部叶子代理名 + DIRECT。"""
     proxies = raw_configs.get("proxies")
     if not isinstance(proxies, list):
-        logger.warning("无 proxies 列表，跳过 Via-Proxy 策略组替换")
+        logger.warning("无 proxies 列表，跳过 A-Via-Proxy 策略组替换")
         return
     names: list[str] = []
     seen: set[str] = set()
@@ -100,17 +100,17 @@ def _apply_via_proxy_only_groups(raw_configs: dict) -> None:
         seen.add(n)
         names.append(n)
     if not names:
-        logger.warning("proxies 中无有效 name，跳过 Via-Proxy 策略组替换")
+        logger.warning("proxies 中无有效 name，跳过 A-Via-Proxy 策略组替换")
         return
     raw_configs["proxy-groups"] = [
         {
-            "name": "Via-Proxy",
+            "name": "A-Via-Proxy",
             "type": "select",
             "proxies": names + ["DIRECT"],
         }
     ]
     logger.info(
-        "已用 Via-Proxy 替换 proxy-groups（%d 个节点 + DIRECT）",
+        "已用 A-Via-Proxy 替换 proxy-groups（%d 个节点 + DIRECT）",
         len(names),
     )
 
@@ -123,6 +123,8 @@ def _finalize_config(
     _apply_rules_template(raw_configs, rules_template_path)
     if slim_proxy_groups:
         _apply_via_proxy_only_groups(raw_configs)
+    # 订阅常带 secret；合并产物一律去掉，外部控制器不启用 Bearer
+    raw_configs.pop("secret", None)
 
 
 def merge_cfg(

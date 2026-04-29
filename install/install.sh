@@ -20,7 +20,7 @@ mcs_print_root_install_notice() {
 	echo "    • systemd --user: \${HOME}/.config/systemd/user/myclash.service"
 	echo "      （当前 HOME=${HOME:-未设置}）"
 	echo "    • shell 片段: \${HOME}/.bashrc"
-	echo "    • 仓库内: ${MYCLASH_ROOT_PWD}/venv 、 mcs/ 、 cache/（下载缓存）、tmp/（生成物）等"
+	echo "    • 仓库内: ${MYCLASH_ROOT_PWD}/venv 、 mcs/ 、 cache/download/（安装下载）、cache/subscribe/（订阅缓存）等"
 	echo "  桌面日常使用建议在普通用户下安装；root/容器等场景可忽略本提示。"
 	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	echo ""
@@ -106,23 +106,51 @@ install_mcs() {
 	mkdir -p "${MYCLASH_ROOT_PWD}/mcs/configs"
 	chmod -R u+rwX "${MYCLASH_ROOT_PWD}/mcs/"
 
+	# 预下载物在 cache/download/；旧版扁平 cache/ 根仍兼容（迁移脚本会搬移）
+	CACHE_DL="${MYCLASH_ROOT_PWD}/cache/download"
+	CLASH_GZ="${CACHE_DL}/clash.gz"
+	if [ ! -f "$CLASH_GZ" ]; then
+		CLASH_GZ="${MYCLASH_ROOT_PWD}/cache/clash.gz"
+	fi
+	if [ ! -f "$CLASH_GZ" ]; then
+		failed_and_exit "未找到 clash.gz（请先执行 download_clash / install-cache，预期 cache/download/clash.gz）"
+	fi
 	# mihomo 压缩包解压为 mcs/bin/clash，与 user_config 中 backend: clash 及 paths.clash_executable 一致
-	gunzip -c "${MYCLASH_ROOT_PWD}/cache/clash.gz" >"${MYCLASH_ROOT_PWD}/mcs/bin/clash"
+	gunzip -c "$CLASH_GZ" >"${MYCLASH_ROOT_PWD}/mcs/bin/clash"
 	chmod +x "${MYCLASH_ROOT_PWD}/mcs/bin/clash"
 
-	if [ -f "${MYCLASH_ROOT_PWD}/cache/v2ray" ]; then
-		cp -f "${MYCLASH_ROOT_PWD}/cache/v2ray" "${MYCLASH_ROOT_PWD}/mcs/bin/v2ray"
+	V2_SRC="${CACHE_DL}/v2ray"
+	if [ ! -f "$V2_SRC" ]; then
+		V2_SRC="${MYCLASH_ROOT_PWD}/cache/v2ray"
+	fi
+	if [ -f "$V2_SRC" ]; then
+		cp -f "$V2_SRC" "${MYCLASH_ROOT_PWD}/mcs/bin/v2ray"
 		chmod +x "${MYCLASH_ROOT_PWD}/mcs/bin/v2ray"
-		echo "已从 cache/v2ray 复制 v2ray 到 mcs/bin/"
+		echo "已从 ${V2_SRC} 复制 v2ray 到 mcs/bin/"
 	fi
 
-	cp "${MYCLASH_ROOT_PWD}/cache/Country.mmdb" "${MYCLASH_ROOT_PWD}/mcs/configs/Country.mmdb"
-
-	if [ -f "${MYCLASH_ROOT_PWD}/cache/geoip.dat" ]; then
-		cp -f "${MYCLASH_ROOT_PWD}/cache/geoip.dat" "${MYCLASH_ROOT_PWD}/mcs/configs/geoip.dat"
+	MMDB_SRC="${CACHE_DL}/Country.mmdb"
+	if [ ! -f "$MMDB_SRC" ]; then
+		MMDB_SRC="${MYCLASH_ROOT_PWD}/cache/Country.mmdb"
 	fi
-	if [ -f "${MYCLASH_ROOT_PWD}/cache/geosite.dat" ]; then
-		cp -f "${MYCLASH_ROOT_PWD}/cache/geosite.dat" "${MYCLASH_ROOT_PWD}/mcs/configs/geosite.dat"
+	if [ ! -f "$MMDB_SRC" ]; then
+		failed_and_exit "未找到 Country.mmdb（install-cache 应下载至 cache/download/）"
+	fi
+	cp "$MMDB_SRC" "${MYCLASH_ROOT_PWD}/mcs/configs/Country.mmdb"
+
+	GEOIP_SRC="${CACHE_DL}/geoip.dat"
+	if [ ! -f "$GEOIP_SRC" ]; then
+		GEOIP_SRC="${MYCLASH_ROOT_PWD}/cache/geoip.dat"
+	fi
+	if [ -f "$GEOIP_SRC" ]; then
+		cp -f "$GEOIP_SRC" "${MYCLASH_ROOT_PWD}/mcs/configs/geoip.dat"
+	fi
+	GEOSITE_SRC="${CACHE_DL}/geosite.dat"
+	if [ ! -f "$GEOSITE_SRC" ]; then
+		GEOSITE_SRC="${MYCLASH_ROOT_PWD}/cache/geosite.dat"
+	fi
+	if [ -f "$GEOSITE_SRC" ]; then
+		cp -f "$GEOSITE_SRC" "${MYCLASH_ROOT_PWD}/mcs/configs/geosite.dat"
 	fi
 
 	version=""
@@ -169,16 +197,17 @@ install_mcs() {
 	echo "设置 systemd 用户服务（systemctl --user）"
 	USER_UNIT_DIR="${HOME}/.config/systemd/user"
 	mkdir -p "${USER_UNIT_DIR}"
+	mkdir -p "${MYCLASH_ROOT_PWD}/cache"
 	systemctl --user stop myclash.service 2>/dev/null || true
 	systemctl --user disable myclash.service 2>/dev/null || true
 
 	"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/runtime/gen_placehold_fill_file.py" \
 		"${MYCLASH_ROOT_PWD}/install/templates/myclash.service" \
-		"${MYCLASH_ROOT_PWD}/tmp/myclash.service" \
+		"${MYCLASH_ROOT_PWD}/cache/myclash.service.gen" \
 		"${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}"
-	cp "${MYCLASH_ROOT_PWD}/tmp/myclash.service" "${USER_UNIT_DIR}/myclash.service"
+	cp "${MYCLASH_ROOT_PWD}/cache/myclash.service.gen" "${USER_UNIT_DIR}/myclash.service"
 	chmod 0644 "${USER_UNIT_DIR}/myclash.service"
-	rm -f "${MYCLASH_ROOT_PWD}/tmp/myclash.service"
+	rm -f "${MYCLASH_ROOT_PWD}/cache/myclash.service.gen"
 
 	systemctl --user daemon-reload
 	print_err_and_exit_if_failed "systemctl --user daemon-reload 失败"
@@ -206,9 +235,10 @@ rm -rf "${MYCLASH_ROOT_PWD}/mcs"
 install_mcs
 
 echo "设置 shell 环境变量（写入 ~/.bashrc）"
+mkdir -p "${MYCLASH_ROOT_PWD}/cache"
 "${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/runtime/gen_placehold_fill_file.py" \
 	"${MYCLASH_ROOT_PWD}/install/templates/env_prefix.txt" \
-	"${MYCLASH_ROOT_PWD}/tmp/env_prefix.txt" \
+	"${MYCLASH_ROOT_PWD}/cache/env_prefix.txt" \
 	"${MYCLASH_ROOT_PWD}"
 
 RC="${HOME}/.bashrc"
@@ -218,6 +248,6 @@ end_line=$(grep -nF 'clash_env_set_end' "$RC" 2>/dev/null | head -1 | cut -d: -f
 if [ -n "${start_line}" ] && [ -n "${end_line}" ]; then
 	sed -i "${start_line},${end_line}d" "$RC"
 fi
-cat "${MYCLASH_ROOT_PWD}/tmp/env_prefix.txt" >>"$RC"
+cat "${MYCLASH_ROOT_PWD}/cache/env_prefix.txt" >>"$RC"
 
 echo_guider_after_success

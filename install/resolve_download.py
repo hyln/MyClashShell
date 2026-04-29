@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""install/download.yaml：解析 URL + 将安装所需二进制下载到 cache/。
+"""install/download.yaml：解析 URL + 将安装所需二进制下载到 cache/download/。
 
 子命令:
-  install-cache   创建 cache/tmp、安装 pip 依赖、下载 mihomo → cache/clash.gz、Country.mmdb、
+  install-cache   创建 cache/download/、安装 pip 依赖、下载 mihomo → cache/download/clash.gz、Country.mmdb、
                   geoip.dat / geosite.dat（install/download.yaml 中 ``geoip`` / ``geosite``）、
-                  可选下载并解压 v2ray 到 cache/v2ray（供 install.sh 再 cp 到 mcs/bin/）
+                  可选下载并解压 v2ray 到 cache/download/v2ray（供 install.sh 再 cp 到 mcs/bin/）
   url SECTION [ARCH]  仅打印一条 URL（SECTION 为 mmdb / geoip / geosite 时不带 ARCH；clash/mihomo/mihoyo 均指向 mihomo 段）
 
 环境变量 MYCLASH_ROOT_PWD 须指向仓库根。
@@ -26,6 +26,15 @@ from urllib.error import URLError
 from urllib.request import urlretrieve
 
 import yaml
+
+_repo_root = Path(__file__).resolve().parents[1]
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+from scripts.lib.paths import (  # noqa: E402
+    cache_download_dir,
+    migrate_legacy_cache_layout,
+    repo_cache_dir,
+)
 
 _V2RAY_NAMES = ("v2ray", "xray")
 
@@ -148,12 +157,13 @@ def _find_v2ray_binary(unzip_dir: Path) -> Path | None:
 
 def cmd_install_cache() -> None:
     root = _root()
-    cache = root / "cache"
-    tmp = root / "tmp"
-    cache.mkdir(parents=True, exist_ok=True)
-    tmp.mkdir(parents=True, exist_ok=True)
-    _chmod_tree_rw(cache)
-    _chmod_tree_rw(tmp)
+    migrate_legacy_cache_layout(root)
+    dload = cache_download_dir(root)
+    dload.mkdir(parents=True, exist_ok=True)
+    repo_cache = repo_cache_dir(root)
+    repo_cache.mkdir(parents=True, exist_ok=True)
+    _chmod_tree_rw(repo_cache)
+    _chmod_tree_rw(dload)
 
     venv_py = root / "venv" / "bin" / "python3"
     if not venv_py.is_file():
@@ -183,21 +193,21 @@ def cmd_install_cache() -> None:
     arch = _machine_to_dl_arch()
     print(f"resolve_download: 使用 install/download.yaml 架构={arch}")
 
-    clash_gz = cache / "clash.gz"
+    clash_gz = dload / "clash.gz"
     if clash_gz.is_file():
-        print("resolve_download: cache/clash.gz 已存在，跳过")
+        print("resolve_download: cache/download/clash.gz 已存在，跳过")
     else:
         _download_file(_url_from_doc(data, _YAML_KERNEL_SECTION, arch), clash_gz, "mihomo→clash.gz")
 
-    mmdb = cache / "Country.mmdb"
+    mmdb = dload / "Country.mmdb"
     if mmdb.is_file():
-        print("resolve_download: cache/Country.mmdb 已存在，跳过")
+        print("resolve_download: cache/download/Country.mmdb 已存在，跳过")
     else:
         _download_file(_url_from_doc(data, "mmdb", None), mmdb, "Country.mmdb")
 
-    geoip_path = cache / "geoip.dat"
+    geoip_path = dload / "geoip.dat"
     if geoip_path.is_file():
-        print("resolve_download: cache/geoip.dat 已存在，跳过")
+        print("resolve_download: cache/download/geoip.dat 已存在，跳过")
     else:
         gu = _geo_asset_url(data, "geoip")
         if gu:
@@ -208,9 +218,9 @@ def cmd_install_cache() -> None:
                 file=sys.stderr,
             )
 
-    geosite_path = cache / "geosite.dat"
+    geosite_path = dload / "geosite.dat"
     if geosite_path.is_file():
-        print("resolve_download: cache/geosite.dat 已存在，跳过")
+        print("resolve_download: cache/download/geosite.dat 已存在，跳过")
     else:
         gs = _geo_asset_url(data, "geosite")
         if gs:
@@ -226,15 +236,15 @@ def cmd_install_cache() -> None:
         print("resolve_download: 无 v2ray URL，跳过 v2ray 二进制", file=sys.stderr)
         return
 
-    shutil.rmtree(cache / "v2ray_unzip", ignore_errors=True)
-    zip_path = cache / "v2ray.zip"
-    v2_bin = cache / "v2ray"
+    shutil.rmtree(dload / "v2ray_unzip", ignore_errors=True)
+    zip_path = dload / "v2ray.zip"
+    v2_bin = dload / "v2ray"
     if zip_path.is_file():
-        print("resolve_download: cache/v2ray.zip 已存在，跳过下载")
+        print("resolve_download: cache/download/v2ray.zip 已存在，跳过下载")
     elif not _download_file_optional(v2_url, zip_path, "v2ray zip"):
         return
 
-    with tempfile.TemporaryDirectory(prefix="v2ray_uz_", dir=str(cache)) as udz:
+    with tempfile.TemporaryDirectory(prefix="v2ray_uz_", dir=str(dload)) as udz:
         uz_path = Path(udz)
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
@@ -281,7 +291,7 @@ def main() -> None:
 
     sub.add_parser(
         "install-cache",
-        help="下载 mihomo（cache/clash.gz）/ mmdb / geoip.dat / geosite.dat / v2ray 到 cache/",
+        help="下载 mihomo（cache/download/clash.gz）/ mmdb / geoip.dat / geosite.dat / v2ray 到 cache/download/",
     )
 
     p_url = sub.add_parser("url", help="打印单条 URL")

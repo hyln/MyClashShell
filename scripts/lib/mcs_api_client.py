@@ -22,7 +22,7 @@ from pathlib import Path
 
 import yaml
 
-from scripts.lib.paths import download_cache_dir, repo_root
+from scripts.lib.paths import repo_cache_dir, repo_root
 
 # user_config 未写 mcs_api_port_range 时的默认池（含端点）
 DEFAULT_MCS_API_START_PORT = 29190
@@ -30,7 +30,7 @@ DEFAULT_MCS_API_END_PORT = 29290
 
 
 def _current_mcs_port_path(base: Path) -> Path:
-    return download_cache_dir(base) / "current_mcs_port.txt"
+    return repo_cache_dir(base) / "current_mcs_port.txt"
 
 
 def read_mcs_port_from_file(root: Path | None = None) -> int | None:
@@ -52,7 +52,7 @@ def read_mcs_port_from_file(root: Path | None = None) -> int | None:
 
 def write_current_mcs_port_file(root: Path, port: int) -> None:
     """将当前 mcs_manager 监听端口写入 ``cache/current_mcs_port.txt``。"""
-    d = download_cache_dir(root)
+    d = repo_cache_dir(root)
     d.mkdir(parents=True, exist_ok=True)
     _current_mcs_port_path(root).write_text(f"{int(port)}\n", encoding="utf-8")
 

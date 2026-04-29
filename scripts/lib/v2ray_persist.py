@@ -10,7 +10,7 @@ from typing import Any
 import yaml
 
 from scripts.lib.mcs_api_client import request_kernel_reload, wait_kernel_ready
-from scripts.lib.paths import download_cache_dir, mcs_configs_dir
+from scripts.lib.paths import mcs_configs_dir, subscribe_cache_dir
 from scripts.lib.subscribe import parse_subscribes, resolve_default_subscribe_name
 from scripts.lib.v2ray_subscribe import (
     _proxy_outbounds_from_saved_v2ray,
@@ -54,7 +54,7 @@ def resolve_v2ray_default_profile(root: Path) -> tuple[str, dict[str, Any], Path
 
 
 def load_proxy_outbounds_from_cache(root: Path, profile_name: str) -> list[dict[str, Any]]:
-    cache_json = download_cache_dir(root) / f"{profile_name}.json"
+    cache_json = subscribe_cache_dir(root) / f"{profile_name}.json"
     if not cache_json.is_file():
         raise ValueError(f"未找到 {cache_json}，请先执行 myclash service update_subscribe")
     try:

@@ -7,7 +7,7 @@
   监听地址在 ``user_config.yaml`` 的 ``mcs_api_host``（缺省 ``127.0.0.1``）。端口池优先读取
   ``mcs_api_port_range``（含端点，缺省 ``29190``–``29290``；兼容旧键 ``mcs_api_start_port`` /
   ``mcs_api_end_port``）；不可再指定单一 ``mcs_api_port``。在池内取首个可绑定端口，并写入
-  ``cache/current_mcs_port.txt`` 供客户端发现。
+  ``cache/current_mcs_port.txt``（``repo_cache_dir``）供客户端发现。
   若设置 ``MYCLASH_MCS_API_PORT`` 则强制使用该端口（覆盖池）。
 
 环境变量：
@@ -50,8 +50,9 @@ except ImportError:
 from scripts.lib.mcs_api_client import allocate_mcs_listen_port, write_current_mcs_port_file  # noqa: E402
 from scripts.lib.paths import (  # noqa: E402
     clash_executable,
-    download_cache_dir,
+    current_sub_txt_path,
     mcs_configs_dir,
+    migrate_legacy_cache_layout,
     v2ray_executable,
     v2ray_geo_asset_dir,
 )
@@ -129,9 +130,9 @@ class BackendManager:
     def sync_current_sub_txt(self) -> str:
         """将 ``cache/current_sub.txt`` 写成与 ``user_config`` 默认订阅名一致。"""
         name = self.resolved_default_subscribe_name()
-        cache = download_cache_dir(self._root)
-        cache.mkdir(parents=True, exist_ok=True)
-        (cache / "current_sub.txt").write_text(name, encoding="utf-8")
+        p = current_sub_txt_path(self._root)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(name, encoding="utf-8")
         return name
 
     def spawn_child(self, backend: str) -> subprocess.Popen | None:
@@ -278,6 +279,7 @@ def _on_sigterm(signum: int, frame: object | None) -> None:  # noqa: ARG001
 def main() -> int:
     global _backend, _httpd
     root = _root()
+    migrate_legacy_cache_layout(root)
     mgr = BackendManager(root)
     _backend = mgr
     signal.signal(signal.SIGTERM, _on_sigterm)

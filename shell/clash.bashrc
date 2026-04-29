@@ -89,7 +89,7 @@ _myclash_print_help() {
 
   其它
     change_subscribe <名>
-    share …              无参 = export；serve [端口] | stop | status
+    share [env|export]   输出可 eval 的 export（局域网 Master IP；默认 hostname -I 首个 IPv4）
     docker-proxy update
 
   提示
@@ -123,7 +123,7 @@ myclash()
             journalctl --user -u myclash.service -n 200 -f "${@:3}"
         elif [ $2 = "update_subscribe" ]; then
             myclash shell off
-            ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/update_proxy_config.py
+            ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/update_proxy_config.py "${@:3}"
             myclash shell on
         elif [ $2 = "reload_kernel" ]; then
             PYTHONPATH="${MYCLASH_ROOT_PWD}" \
@@ -230,55 +230,9 @@ myclash()
             echo "export ALL_PROXY=socks5h://${_host}:${_sp}"
             echo "export NO_PROXY=127.0.0.1,localhost"
             ;;
-        'serve')
-            PORT="${3:-${MYCLASH_SLAVE_SERVE_PORT:-8765}}"
-            PIDF="${MYCLASH_ROOT_PWD}/tmp/slave_http_server.pid"
-            LOGF="${MYCLASH_ROOT_PWD}/tmp/slave_http_server.log"
-            mkdir -p "${MYCLASH_ROOT_PWD}/tmp"
-            if [ -f "$PIDF" ]; then
-                OLD=$(cat "$PIDF")
-                if kill -0 "$OLD" 2>/dev/null; then
-                    echo "slave 脚本 HTTP 已在运行 (pid=$OLD)。先执行: myclash share stop"
-                    return 1
-                fi
-                rm -f "$PIDF"
-            fi
-            nohup env MYCLASH_ROOT_PWD="${MYCLASH_ROOT_PWD}" \
-                ${MYCLASH_ROOT_PWD}/venv/bin/python3 \
-                "${MYCLASH_ROOT_PWD}/scripts/runtime/slave_http_server.py" \
-                --bind "${MYCLASH_SLAVE_SERVE_BIND:-0.0.0.0}" --port "$PORT" \
-                >>"$LOGF" 2>&1 &
-            echo $! >"$PIDF"
-            echo "slave 脚本 HTTP 已后台启动 pid=$(cat "$PIDF") 端口=$PORT"
-            echo "Slave 示例: curl -fsSL http://<本机局域网IP>:${PORT}/slave_bootstrap.sh | sudo bash -s -- <本机IP> <Clash HTTP 代理端口>"
-            echo "日志: $LOGF"
-            ;;
-        'stop')
-            PIDF="${MYCLASH_ROOT_PWD}/tmp/slave_http_server.pid"
-            if [ ! -f "$PIDF" ]; then
-                echo "无 pid 文件，可能未启动"
-                return 1
-            fi
-            PID=$(cat "$PIDF")
-            if kill -0 "$PID" 2>/dev/null; then
-                kill "$PID" && echo "已停止 pid=$PID"
-            else
-                echo "进程已不存在，清理 pid 文件"
-            fi
-            rm -f "$PIDF"
-            ;;
-        'status')
-            PIDF="${MYCLASH_ROOT_PWD}/tmp/slave_http_server.pid"
-            if [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; then
-                echo "运行中 pid=$(cat "$PIDF")"
-            else
-                echo "未运行"
-            fi
-            ;;
         *)
-            echo "用法: myclash share [env|export] | myclash share serve [端口] | myclash share stop | myclash share status"
-            echo "不带参数时，直接输出 export 语句（默认使用首个局域网 IPv4）"
-            echo "默认端口 8765；可用环境变量 MYCLASH_SLAVE_SERVE_PORT / MYCLASH_SLAVE_SERVE_BIND"
+            echo "用法: myclash share [env|export]"
+            echo "不带参数或与 env/export：输出可 eval 的 export（MYCLASH_SHARE_HOST 可覆盖主机 IP）"
             ;;
         esac
         ;;
@@ -331,7 +285,7 @@ myclash()
             *) LAN_TXT="未知" ;;
         esac
         _ver=$(cat "${MYCLASH_ROOT_PWD}/install/version" 2>/dev/null || echo "?")
-        current_config_name=$(cat "${MYCLASH_ROOT_PWD}/cache/current_sub.txt" 2>/dev/null || echo "—")
+        current_config_name=$(cat "${MYCLASH_ROOT_PWD}/cache/current_sub.txt" 2>/dev/null || cat "${MYCLASH_ROOT_PWD}/cache/subscribe/current_sub.txt" 2>/dev/null || echo "—")
 
         bash "${MYCLASH_ROOT_PWD}/scripts/tools/test_proxy_status.sh" >/dev/null 2>&1
         _proxy_ok=$?
@@ -353,7 +307,7 @@ _myclash()
         COMPREPLY=( $(compgen -W 'ui log' -- $cur) )
         ;;
     'share')
-        COMPREPLY=( $(compgen -W 'serve stop status' -- $cur) )
+        COMPREPLY=( $(compgen -W 'env export' -- $cur) )
         ;;
     'docker-proxy')
         COMPREPLY=( $(compgen -W 'update' -- $cur) )

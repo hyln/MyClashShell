@@ -20,7 +20,7 @@ mcs_api_port_range: [29190, 29290]
 # 路径相对 MYCLASH_ROOT；删除本项或留空则不替换。
 rules_template: install/templates/rules.yaml
 
-# 合并后仅用 Via-Proxy（全部节点 + DIRECT），替换订阅自带 proxy-groups；与 rules 中 Via-Proxy / DIRECT 搭配
+# 合并后仅用 Via-Proxy（全部节点 + DIRECT），替换订阅自带 proxy-groups；与 rules 中 A-Via-Proxy / DIRECT 搭配
 slim_proxy_groups: true
 
 ################### clash / mihomo 监听与 API（合并订阅时从本文件顶层覆盖订阅同名字段）############
@@ -35,4 +35,5 @@ allow-lan: true
 mode: Rule
 log-level: info
 external-controller: 127.0.0.1:39090
+# 合并写入 mcs/configs/config.yaml 时会去掉订阅里的 secret，外部控制器不按密码访问
 ############################################
