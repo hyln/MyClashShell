@@ -35,7 +35,7 @@ from typing import Any
 
 import yaml
 
-from scripts.lib.paths import download_cache_dir, mcs_configs_dir, v2ray_geo_asset_dir
+from scripts.lib.paths import mcs_configs_dir, subscribe_cache_dir, v2ray_geo_asset_dir
 
 
 def _load_v2ray_existing_for_merge(
@@ -49,7 +49,7 @@ def _load_v2ray_existing_for_merge(
     candidates: list[Path] = []
     if include_mcs:
         candidates.append(mcs_configs_dir(myclash_root) / "v2ray.json")
-    candidates.append(download_cache_dir(myclash_root) / f"{profile_name}.json")
+    candidates.append(subscribe_cache_dir(myclash_root) / f"{profile_name}.json")
     candidates.append(myclash_root / "install/templates/v2ray-default.json")
     for p in candidates:
         if p.is_file():
@@ -72,7 +72,8 @@ def _safe_b64decode(s: str) -> bytes:
     return base64.b64decode(_b64pad(t), validate=False)
 
 
-def _curl_download(url: str, dest: Path, timeout_sec: int = 40) -> bool:
+def _curl_download(url: str, dest: Path, timeout_sec: int = 40) -> tuple[bool, str]:
+    """Returns ``(success, stderr_or_diagnostic)`` for logging on failure."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     cmd = (
         "unset http_proxy https_proxy https_proxy http_proxy ALL_PROXY all_proxy; "
@@ -80,7 +81,12 @@ def _curl_download(url: str, dest: Path, timeout_sec: int = 40) -> bool:
         f'-o "{dest}" "{url}"'
     )
     r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    return r.returncode == 0 and dest.is_file() and dest.stat().st_size > 0
+    err = (r.stderr or "").strip()
+    ok = r.returncode == 0 and dest.is_file() and dest.stat().st_size > 0
+    if ok:
+        return True, ""
+    extra = err or (r.stdout or "").strip() or f"exit {r.returncode}"
+    return False, extra
 
 
 def _decode_subscription_text(raw_bytes: bytes) -> str:
@@ -641,13 +647,14 @@ def download_v2ray_subscription_outbounds(
     profile_name: str,
     url: str,
     logger: logging.Logger,
+    debug: bool = False,
 ) -> list[dict[str, Any]] | None:
     """Download and parse subscription; returns outbounds or ``None`` on failure."""
     url = (url or "").strip()
     if not url:
         logger.warning("v2ray 订阅 %s 未配置 url，跳过下载", profile_name)
         return None
-    cache = download_cache_dir(myclash_root)
+    cache = subscribe_cache_dir(myclash_root)
     cache.mkdir(parents=True, exist_ok=True)
     logger.info('====Download v2ray sub "%s"====', profile_name)
     fd, tmp_name = tempfile.mkstemp(
@@ -656,8 +663,11 @@ def download_v2ray_subscription_outbounds(
     os.close(fd)
     tmp_path = Path(tmp_name)
     try:
-        if not _curl_download(url, tmp_path):
+        ok, curl_diag = _curl_download(url, tmp_path)
+        if not ok:
             logger.error("v2ray 订阅 %s 下载失败", profile_name)
+            if curl_diag:
+                logger.error("curl: %s", curl_diag)
             return None
         text = _decode_subscription_text(tmp_path.read_bytes())
     finally:
@@ -665,7 +675,9 @@ def download_v2ray_subscription_outbounds(
     outbounds = parse_subscription_to_outbounds(text, logger)
     if not outbounds:
         logger.error("v2ray 订阅 %s 解析后无可用节点", profile_name)
-        return None
+        if debug:
+            preview = text.strip().replace("\r\n", "\n")[:500]
+            logger.debug("订阅正文预览（截断）:\n%s", preview)
     return outbounds
 
 
@@ -678,7 +690,7 @@ def refresh_v2ray_json_listen_from_user_config(
     include_mcs: bool | None = None,
 ) -> bool:
     """已有 ``cache/<profile>.json`` 时，仅按当前 ``user_config`` 的 ``socks-port`` / ``port`` / ``allow-lan`` 等重写入站（无需重新下载订阅）。"""
-    cache_path = download_cache_dir(myclash_root) / f"{profile_name}.json"
+    cache_path = subscribe_cache_dir(myclash_root) / f"{profile_name}.json"
     if not cache_path.is_file():
         return False
     try:
@@ -719,7 +731,7 @@ def write_v2ray_json_from_outbounds(
     cfg = _assemble_v2ray_config(
         existing, outbounds, user_doc, myclash_root=myclash_root
     )
-    cache_path = download_cache_dir(myclash_root) / f"{profile_name}.json"
+    cache_path = subscribe_cache_dir(myclash_root) / f"{profile_name}.json"
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if write_mcs:

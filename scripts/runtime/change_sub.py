@@ -11,7 +11,7 @@ _repo = Path(__file__).resolve().parents[2]
 if str(_repo) not in sys.path:
     sys.path.insert(0, str(_repo))
 from scripts.lib.subscribe import parse_subscribes, persist_default_subscribe  # noqa: E402
-from scripts.lib.paths import clash_config_yaml, download_cache_dir  # noqa: E402
+from scripts.lib.paths import clash_config_yaml, migrate_legacy_cache_layout, subscribe_cache_dir  # noqa: E402
 from scripts.lib.mcs_api_client import request_kernel_reload, request_sync_meta  # noqa: E402
 from scripts.lib.v2ray_subscribe import download_and_write_v2ray_config  # noqa: E402
 
@@ -26,7 +26,8 @@ if __name__=="__main__":
     myclash_root_pwd = os.getenv('MYCLASH_ROOT_PWD') # None
     if myclash_root_pwd is None:
         raise TypeError("[ERROR] 找不到 MYCLASH_ROOT_PWD;请尝试 source ~/.bashrc 后重新运行")
-    raw_configs_dir = str(download_cache_dir(Path(myclash_root_pwd)))
+    migrate_legacy_cache_layout(Path(myclash_root_pwd))
+    raw_configs_dir = str(subscribe_cache_dir(Path(myclash_root_pwd)))
     Path(raw_configs_dir).mkdir(parents=True, exist_ok=True)
     gen_rule_cfg_pwd = str(clash_config_yaml(Path(myclash_root_pwd)))
     user_config_path = myclash_root_pwd+'/user_config.yaml'
@@ -106,7 +107,7 @@ if __name__=="__main__":
         logger.info("代理更新完成: 使用: {}".format(new_subscribe))
     persist_default_subscribe(Path(user_config_path), new_subscribe)
     if not request_sync_meta(logger=logger):
-        logger.warning("未能通过 mcs_manager 同步 cache/current_sub.txt（请确认服务已启动）")
+            logger.warning("未能通过 mcs_manager 同步 cache/current_sub.txt（请确认服务已启动）")
     if request_kernel_reload(logger=logger, root=Path(myclash_root_pwd)):
         logger.info("default_subscribe 已设为 %s，内核已由 mcs_manager API 重载", new_subscribe)
     else:

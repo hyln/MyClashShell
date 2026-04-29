@@ -4,13 +4,32 @@
 
 使用docker时3个部分需要使用代理
 
-- pull image时
-- build 时
-- 使用时
+- Pull Image
+- Build Image
+- Use Container
+
+## myclash 下的使用
+
+### pull image
+
+在 myclash 中集成了 `myclash docker-proxy update` 功能，可以自动设置。
+
+### build image
+
+TODO
+
+### Use Container
+
+在主机上使用 `myclash share`, 将输出复制到容器中。
+
+```bash
+myclash share
+```
+
+
+## 原理
 
 ## pull image 走代理
-
-> 在 myclash 中集成了 `myclash docker-proxy update` 功能，可以自动设置。
 
 `docker pull` 由守护进程 `dockerd` 执行，代理需写在 **dockerd 的 systemd 环境**里。一条命令按 `user_config.yaml` 里的 **HTTP 端口**（默认 7890）写入 drop-in 并 `daemon-reload` + 重启 Docker:
 

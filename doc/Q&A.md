@@ -18,3 +18,9 @@ Host github.com
     IdentityFile ~/.ssh/id_rsa
     ProxyCommand nc -v -x 127.0.0.1:7890 %h %p
 ```
+
+## 开机未自动拉起
+
+```bash
+sudo loginctl enable-linger $(whoami)
+```

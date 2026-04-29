@@ -1,20 +1,21 @@
 #!/usr/bin/python
 """``myclash service update_subscribe`` 调用的订阅更新逻辑。
 
-阶段 1 — 更新 **全部** ``subscribes`` 到 cache（与 ``default_subscribe`` 无关）：
+阶段 1 — 更新 **全部** ``subscribes`` 到 ``cache/subscribe/``（与 ``default_subscribe`` 无关）：
 
-- ``backend: clash``：下载到 ``cache/<订阅名>.yaml``；
-- ``backend: v2ray``：下载解析后写入 ``cache/<订阅名>.json``。
+- ``backend: clash``：下载到 ``cache/subscribe/<订阅名>.yaml``；
+- ``backend: v2ray``：下载解析后写入 ``cache/subscribe/<订阅名>.json``。
 
 阶段 2 — **仅**根据 ``default_subscribe`` 解析出的默认项，载入 **mcs** 磁盘配置：
 
 - 默认项为 ``clash``：合并该条（或回退）到 ``mcs/configs/config.yaml``；
-- 默认项为 ``v2ray``：将 ``cache/<默认订阅名>.json`` **复制**到 ``mcs/configs/v2ray.json``（阶段 1 已为每条 v2ray 写好各自 cache）。
+- 默认项为 ``v2ray``：将 ``cache/subscribe/<默认订阅名>.json`` **复制**到 ``mcs/configs/v2ray.json``（阶段 1 已为每条 v2ray 写好各自 cache）。
 
 阶段 2 结束后调用 ``POST /kernel/sync_meta`` 与 ``POST /kernel/reload``，由 mcs 重启子进程加载上述文件（不再使用 Clash 9090 REST 热替换）。
 
 由 ``mcs_manager`` 读 ``user_config`` 默认项的 ``backend`` 决定实际拉起 Clash 还是 v2ray；本脚本阶段 2 负责与之一致的 mcs 主配置。
 """
+import argparse
 import shutil
 import subprocess, sys
 from pathlib import Path
@@ -31,7 +32,12 @@ import colorlog
 _repo = Path(__file__).resolve().parents[2]
 if str(_repo) not in sys.path:
     sys.path.insert(0, str(_repo))
-from scripts.lib.paths import clash_config_yaml, download_cache_dir, mcs_configs_dir  # noqa: E402
+from scripts.lib.paths import (  # noqa: E402
+    clash_config_yaml,
+    mcs_configs_dir,
+    migrate_legacy_cache_layout,
+    subscribe_cache_dir,
+)
 from scripts.lib.subscribe import (  # noqa: E402
     parse_subscribes,
     resolve_default_subscribe_name,
@@ -43,7 +49,13 @@ from scripts.lib.v2ray_subscribe import (  # noqa: E402
     write_v2ray_json_from_outbounds,
 )
 
-def download_profile(profile_name:str,url:str):
+_CLASH_SUBSCRIBE_UA = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/146.0.0.0 Safari/537.36"
+)
+
+
+def download_profile(profile_name: str, url: str, *, debug: bool = False) -> bool:
     '''
     下载profile
     '''
@@ -52,16 +64,26 @@ def download_profile(profile_name:str,url:str):
     logger.info(f'{profile_name} : "{full_url}"')
 
     cache_cfg_path = raw_configs_dir + f"/{profile_name}.yaml"
-    download_configs_cmd= f'unset http_proxy https_proxy;curl -o {cache_cfg_path} -k -L --max-time 20 -H "User-Agent: ClashForWindows/0.20.5" "{full_url}"'
+    download_configs_cmd = (
+        f'unset http_proxy https_proxy;curl -o {cache_cfg_path} -k -L --max-time 20 '
+        f'-H "User-Agent: {_CLASH_SUBSCRIBE_UA}" "{full_url}"'
+    )
     # -k 取消校验
-    # --max-time 10 设置超时
-    print(download_configs_cmd)
+    # --max-time 20 设置超时
+    if debug:
+        logger.debug("执行: %s", download_configs_cmd)
     result = subprocess.run(download_configs_cmd, shell=True, capture_output=True, text=True)
-    # print(result.returncode)
     if result.returncode != 0:
-        logger.debug(result.stdout.strip())
-        logger.error(f"Download {profile_name} failed")
-        print(result.stdout.strip())
+        logger.error("Download %s failed（curl 退出码 %s）", profile_name, result.returncode)
+        err = (result.stderr or "").strip()
+        out = (result.stdout or "").strip()
+        if err:
+            logger.error("curl stderr: %s", err)
+        if out:
+            logger.error("curl stdout: %s", out[:4000])
+        if debug:
+            logger.debug("curl 完整 stdout:\n%s", result.stdout)
+            logger.debug("curl 完整 stderr:\n%s", result.stderr)
         return False
     # 检查yaml文件是否合法且包含关键字
     try:
@@ -71,9 +93,12 @@ def download_profile(profile_name:str,url:str):
         required_keys = ['proxies', 'proxy-groups', 'rules']
         if not any(key in cfg_data for key in required_keys):
             logger.error(f"{profile_name} 配置文件缺少关键字段，你的订阅可能已过期或不支持 Clash,也请检查网络连接是否正常")
+            
             return False
     except Exception as e:
         logger.error(f"{profile_name} 配置文件解析失败: {e}")
+        if debug:
+            logger.debug("%s", traceback.format_exc())
         return False
 
     #  asset config is already download
@@ -91,12 +116,23 @@ def download_profile(profile_name:str,url:str):
 
     
 if __name__=="__main__":
-
-    # find path
     myclash_root_pwd = os.getenv('MYCLASH_ROOT_PWD') # None
     if myclash_root_pwd is None:
         raise TypeError("[ERROR] 找不到 MYCLASH_ROOT_PWD;请尝试 source ~/.bashrc 后重新运行")
-    raw_configs_dir = str(download_cache_dir(Path(myclash_root_pwd)))
+
+    migrate_legacy_cache_layout(Path(myclash_root_pwd))
+
+    _parser = argparse.ArgumentParser(description="更新订阅并载入 mcs（myclash service update_subscribe）")
+    _parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="输出详细诊断（curl stderr、mcs API、解析栈等）",
+    )
+    _args = _parser.parse_args()
+    _debug = bool(_args.debug)
+
+    # find path
+    raw_configs_dir = str(subscribe_cache_dir(Path(myclash_root_pwd)))
     Path(raw_configs_dir).mkdir(parents=True, exist_ok=True)
     gen_rule_cfg_pwd = str(clash_config_yaml(Path(myclash_root_pwd)))
     user_config_path = myclash_root_pwd+'/user_config.yaml'
@@ -129,6 +165,11 @@ if __name__=="__main__":
     # 将处理器添加到记录器
     logger.addHandler(console_handler)
     logger.addHandler(file_handler)
+
+    if _debug:
+        logger.setLevel(logging.DEBUG)
+        console_handler.setLevel(logging.DEBUG)
+        file_handler.setLevel(logging.DEBUG)
 
 
     # logger.info("1. Delete Download Configs")
@@ -175,7 +216,7 @@ if __name__=="__main__":
             continue
         url = entry.get("url") or ""
         if util.is_valid_url(url):
-            ret = download_profile(key, url)
+            ret = download_profile(key, url, debug=_debug)
             if ret:
                 download_configs.append(key)
         else:
@@ -193,6 +234,7 @@ if __name__=="__main__":
             profile_name=key,
             url=v2_url,
             logger=logger,
+            debug=_debug,
         )
         if not obs:
             if key == effective and eff_backend == "v2ray":
@@ -229,7 +271,7 @@ if __name__=="__main__":
         logger.info("默认后端为 v2ray：不写 config.yaml")
         eff_v2_url = (subs.get(effective, {}).get("url") or "").strip()
         if eff_v2_url:
-            cache_json = download_cache_dir(root) / f"{effective}.json"
+            cache_json = subscribe_cache_dir(root) / f"{effective}.json"
             if not cache_json.is_file():
                 logger.error(
                     "默认 v2ray 订阅应有 cache 文件 %s（阶段 1 应已生成），中止",
@@ -267,7 +309,16 @@ if __name__=="__main__":
         logger.warning(
             "未能通过 mcs_manager POST /kernel/sync_meta 更新 cache/current_sub.txt（服务未启动时可忽略）"
         )
+        if _debug:
+            logger.debug(
+                "sync_meta 调试: 检查 MYCLASH_MCS_API_PORT、cache/current_mcs_port.txt，"
+                "或确认 myclash.service 已启动"
+            )
     if not request_kernel_reload(logger=logger, root=root):
         logger.warning(
             "未能通过 mcs_manager POST /kernel/reload 重载内核（服务未启动时可忽略；已启动时请执行 myclash service restart）"
         )
+        if _debug:
+            logger.debug(
+                "reload 调试: 同上；也可查看 journalctl --user -u myclash.service -n 80"
+            )

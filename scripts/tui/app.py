@@ -834,20 +834,22 @@ class ClashTuiApp(App[None]):
     def _sync_main_footer(self) -> None:
         vid = self._current_view()
         err = self._state.last_error
-        base = "sidebar up/down  Enter/Tab main  ctrl+b sidebar  q quit"
+        base = "Sidebar ↑↓ pages · Enter/Tab enter page · Ctrl+B sidebar · q quit"
         if vid == "view-proxies":
             extra = (
-                "  |  proxies: left groups  right kj/up/down nodes  Tab columns  Enter select  r retest  [/] group  u sync  Esc right"
+                "  |  Proxies: Tab = Group list ↔ Node list · "
+                "[ ] prev/next strategy group · ↑↓ or j/k move · Enter apply · "
+                "r latency test · u reload from API · Esc focus node list"
                 + (f"  |  {err}" if err else "")
             )
         elif vid == "view-overview":
             extra = (
                 f"  |  {_truncate(self._overview_err, 72)}"
                 if self._overview_err
-                else "  |  overview: connections and traffic"
+                else "  |  Overview: live traffic + connection counts"
             )
         elif vid == "view-config":
-            extra = "  |  config: Apply writes runtime (PATCH /configs)"
+            extra = "  |  Config: Apply patches runtime (PATCH /configs)"
         else:
             extra = ""
         self.query_one("#status-line", Static).update(base + extra)
