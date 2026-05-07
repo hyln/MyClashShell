@@ -93,7 +93,8 @@ _myclash_print_help() {
     docker-proxy update
 
   提示
-    · update_subscribe：拉订阅并写配置；reload_kernel：只重启 clash/v2ray 子进程
+    · update_subscribe / change_subscribe：会先 shell off，避免经代理拉配置失败；结束后再 shell on
+    · reload_kernel：只重启 clash/v2ray 子进程
     · API 端口见 cache/current_mcs_port.txt；池见 user_config.mcs_api_port_range
     · get_logs / log：journalctl --user；无登录会话：loginctl enable-linger <用户>
     · 无子命令或非常规参数：打印运行状态摘要；等价于单独执行 myclash（无参数）
@@ -195,7 +196,11 @@ myclash()
         journalctl --user -u myclash.service -n 200 -f "${@:2}"
         ;;
     'change_subscribe')
-        ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/change_sub.py $2
+        local _cs_rc=0
+        myclash shell off
+        ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/change_sub.py "${@:2}" || _cs_rc=$?
+        myclash shell on
+        return "${_cs_rc}"
         ;;
     'ui')
         # 按 default_subscribe 的 backend（优先 mcs GET /kernel/status）自动打开 Clash TUI 或 v2ray TUI
