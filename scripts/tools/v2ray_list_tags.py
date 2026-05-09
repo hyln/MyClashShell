@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""列出当前默认 v2ray 订阅合并进 mcs 后的 proxy outbound tag（供脚本或 ``v2ray ui`` 参考）。"""
+"""列出当前默认 v2ray 订阅合并进 mcs 后的 proxy outbound tag（供脚本或 ``myclash ui`` 参考）。"""
 
 from __future__ import annotations
 
