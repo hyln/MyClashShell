@@ -1,10 +1,13 @@
-import colorlog
+import argparse
+import logging
 import os
 import sys
-import yaml
-import logging
-import argparse
 from pathlib import Path
+from urllib.parse import urlparse
+
+import colorlog
+import yaml
+
 import merge_proxy
 
 _repo = Path(__file__).resolve().parents[2]
@@ -15,11 +18,56 @@ from scripts.lib.paths import clash_config_yaml, migrate_legacy_cache_layout, su
 from scripts.lib.mcs_api_client import request_kernel_reload, request_sync_meta  # noqa: E402
 from scripts.lib.v2ray_subscribe import download_and_write_v2ray_config  # noqa: E402
 
+
+def _load_user_config(root: Path) -> dict:
+    user_config_path = root / "user_config.yaml"
+    with user_config_path.open("r", encoding="utf-8") as stream:
+        doc = yaml.safe_load(stream)
+    return doc if isinstance(doc, dict) else {}
+
+
+def _short_url(url: str) -> str:
+    if not url:
+        return ""
+    try:
+        parsed = urlparse(url)
+        host = parsed.netloc or parsed.path
+        return host or url
+    except Exception:
+        return url
+
+
+def _print_available_subscribes(
+    subs: dict[str, dict[str, str]],
+    default_sub: object,
+    *,
+    verbose: bool = False,
+) -> None:
+    if not subs:
+        print("当前没有可用订阅")
+        return
+    print("可用订阅（* 为当前默认订阅）:")
+    default_name = str(default_sub or "DEFAULT").strip()
+    width = max((len(name) for name in subs), default=0)
+    for name, entry in subs.items():
+        be = str(entry.get("backend") or "clash").strip().lower()
+        url = str(entry.get("url") or "").strip()
+        mark = "*" if default_name == "DEFAULT" or name == default_name else " "
+        label = f"{mark} {name.ljust(width)} [{be}]"
+        if verbose and url:
+            print(f"{label} {url}")
+        elif url:
+            print(f"{label} {_short_url(url)}")
+        else:
+            print(label)
+
 if __name__=="__main__":
     parser = argparse.ArgumentParser(
         description="切换到已配置的订阅名：更新 default_subscribe；cache/current_sub.txt 由 mcs API 同步；Clash 合并写盘；v2ray 下载并写配置；mcs POST /kernel/reload 让子进程加载新配置"
     )
-    parser.add_argument("new_subscribe", type=str, help="订阅名（subscribes 下的键）")
+    parser.add_argument("new_subscribe", nargs="?", default=None, help="订阅名（subscribes 下的键）")
+    parser.add_argument("--list", action="store_true", help="列出可用订阅并退出")
+    parser.add_argument("--verbose", action="store_true", help="列出时显示完整 URL")
     args = parser.parse_args()
     new_subscribe = args.new_subscribe
     # find path
@@ -61,10 +109,7 @@ if __name__=="__main__":
     logger.addHandler(file_handler)
 
 
-    with open(user_config_path, "r") as stream:
-        dictionary = yaml.safe_load(stream)
-    if not isinstance(dictionary, dict):
-        dictionary = {}
+    dictionary = _load_user_config(Path(myclash_root_pwd))
     sub_dict = dictionary.get("subscribes")
     if sub_dict is None:
         raise TypeError("[ERROR] 没有找到订阅信息")
@@ -73,8 +118,15 @@ if __name__=="__main__":
     except ValueError as e:
         logger.error(str(e))
         raise SystemExit(1) from e
+
+    if args.list or not new_subscribe:
+        _print_available_subscribes(subs, dictionary.get("default_subscribe"), verbose=args.verbose)
+        raise SystemExit(0)
+
     if new_subscribe not in subs:
-        raise TypeError("[ERROR] 不存在此订阅")
+        logger.error("[ERROR] 不存在此订阅: %s", new_subscribe)
+        _print_available_subscribes(subs, dictionary.get("default_subscribe"), verbose=args.verbose)
+        raise SystemExit(2)
     entry = subs[new_subscribe]
     rules_template_resolved = merge_proxy.resolve_rules_template_path(
         myclash_root_pwd,

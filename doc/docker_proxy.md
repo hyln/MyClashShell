@@ -20,7 +20,7 @@ TODO
 
 ### Use Container
 
-在主机上使用 `myclash share`, 将输出复制到容器中。
+在主机上使用 `myclash share`, 输出可直接复制到容器或 `eval`。
 
 ```bash
 myclash share

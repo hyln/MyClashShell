@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """写入 ``user_config.yaml`` 的 ``v2ray_outbound_tag``，并重写 ``mcs/configs/v2ray.json`` + 请求内核重载。
 
-命令行用法（一般不手写；选节点请用 ``myclash v2ray ui``）::
+命令行用法（一般不手写；选节点请用 ``myclash ui``）::
 
     PYTHONPATH=<repo> python3 scripts/tools/v2ray_use.py <outbound-tag>
     PYTHONPATH=<repo> python3 scripts/tools/v2ray_use.py --clear

@@ -850,6 +850,8 @@ class ClashTuiApp(App[None]):
             )
         elif vid == "view-config":
             extra = "  |  Config: Apply patches runtime (PATCH /configs)"
+        elif vid == "view-yaml":
+            extra = "  |  YAML: Ctrl+S save · reload/validate buttons"
         else:
             extra = ""
         self.query_one("#status-line", Static).update(base + extra)
@@ -1028,6 +1030,18 @@ class ClashTuiApp(App[None]):
 
     def action_focus_sidebar(self) -> None:
         self.query_one("#sidebar-nav", ListView).focus()
+
+    def action_goto_yaml(self) -> None:
+        self._apply_sidebar_index(VIEW_IDS.index("view-yaml"))
+        self._focus_first_in_main()
+
+    def action_save_yaml(self) -> None:
+        self.run_worker(
+            self.yaml_save(),
+            group="yaml-save",
+            exclusive=True,
+            exit_on_error=False,
+        )
 
     def action_focus_proxy_grid(self) -> None:
         if self._current_view() == "view-proxies":
