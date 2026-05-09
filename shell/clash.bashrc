@@ -197,6 +197,10 @@ myclash()
         ;;
     'change_subscribe')
         local _cs_rc=0
+        if [ $# -lt 2 ]; then
+            ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/change_sub.py --list || _cs_rc=$?
+            return "${_cs_rc}"
+        fi
         myclash shell off
         ${MYCLASH_ROOT_PWD}/venv/bin/python3 ${MYCLASH_ROOT_PWD}/scripts/runtime/change_sub.py "${@:2}" || _cs_rc=$?
         myclash shell on
@@ -224,14 +228,11 @@ myclash()
             _hp="$(_myclash_http_port)"
             _sp="$(_myclash_socks_port)"
             _host="$(_myclash_share_host)"
-            echo "export http_proxy=http://${_host}:${_hp}"
-            echo "export https_proxy=http://${_host}:${_hp}"
-            echo "export ftp_proxy=http://${_host}:${_hp}"
+            echo "# 直接复制到当前 shell，或手动按需修改后再执行"
+            echo "export http_proxy=http://${_host}:${_hp} https_proxy=http://${_host}:${_hp} ftp_proxy=http://${_host}:${_hp}"
             echo "export all_proxy=socks5h://${_host}:${_sp}"
             echo "export no_proxy=127.0.0.1,localhost"
-            echo "export HTTP_PROXY=http://${_host}:${_hp}"
-            echo "export HTTPS_PROXY=http://${_host}:${_hp}"
-            echo "export FTP_PROXY=http://${_host}:${_hp}"
+            echo "export HTTP_PROXY=http://${_host}:${_hp} HTTPS_PROXY=http://${_host}:${_hp} FTP_PROXY=http://${_host}:${_hp}"
             echo "export ALL_PROXY=socks5h://${_host}:${_sp}"
             echo "export NO_PROXY=127.0.0.1,localhost"
             ;;
@@ -251,28 +252,6 @@ myclash()
             echo "  按 user_config 的 HTTP 端口写入 dockerd 的 systemd drop-in，并 reload + restart。"
             echo "  自动识别 rootless（用户单元）与 rootful（需 sudo）。"
             echo "  强制目标: MYCLASH_DOCKER_PROXY_TARGET=user|system"
-            ;;
-        esac
-        ;;
-    'v2ray')
-        case $2 in
-        'ui')
-            PYTHONPATH="${MYCLASH_ROOT_PWD}" \
-                "${MYCLASH_ROOT_PWD}/venv/bin/python3" -m scripts.tui_v2ray "${@:3}"
-            ;;
-        'log')
-            if ! command -v journalctl >/dev/null 2>&1; then
-                echo "myclash v2ray log: 未找到 journalctl（需 systemd）" >&2
-                return 1
-            fi
-            # v2ray 子进程与 mcs_manager 的 stdout/stderr 由 systemd --user 写入 journal
-            journalctl --user -u myclash.service -n 200 -f "${@:4}"
-            ;;
-        *)
-            echo "用法:"
-            echo "  myclash v2ray ui   — 节点选择与测速（Textual）"
-            echo "  myclash v2ray log  — 同 myclash log / service get_logs（journalctl myclash.service）"
-            echo "  追加参数会原样传给 journalctl，例如: myclash v2ray log --since today"
             ;;
         esac
         ;;
@@ -306,10 +285,7 @@ _myclash()
 
     case $cmd in
     'myclash')
-        COMPREPLY=( $(compgen -W 'service window shell log help change_subscribe ui share docker-proxy v2ray' -- $cur) )
-        ;;
-    'v2ray')
-        COMPREPLY=( $(compgen -W 'ui log' -- $cur) )
+        COMPREPLY=( $(compgen -W 'service window shell log help change_subscribe ui share docker-proxy' -- $cur) )
         ;;
     'share')
         COMPREPLY=( $(compgen -W 'env export' -- $cur) )

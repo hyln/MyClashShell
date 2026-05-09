@@ -8,7 +8,7 @@ subscribes:
 default_subscribe: "DEFAULT"
 
 # 仅 v2ray 后端且订阅含多个节点时：填某 outbound 的 tag 则固定走该节点；留空则随机 balancer。
-# 也可用：myclash v2ray ui（图形里选节点、测速、固定/取消固定）
+# 也可用：myclash ui（图形里选节点、测速、固定/取消固定）
 # v2ray_outbound_tag: ""
 
 # mcs_manager 本地控制 HTTP（GET /kernel/status、reload_kernel 等）；修改后需重启 mcs 服务

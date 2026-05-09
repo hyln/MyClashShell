@@ -9,7 +9,7 @@
 ``update_proxy_config`` 在阶段 1 末会对已有 ``cache/<订阅>.json`` 再刷新入站，故只改 ``socks-port`` 不重下订阅也会写入 cache。
 
 多代理 outbound 时默认路由为 **随机 balancer**；若在 ``user_config.yaml`` 设置 ``v2ray_outbound_tag``
-为某一节点 tag，则全部流量固定走该 outbound（与 ``myclash v2ray ui`` 里选用节点等价）。
+为某一节点 tag，则全部流量固定走该 outbound（与 ``myclash ui`` 里选用节点等价）。
 
 ``mcs/configs`` 或 ``cache`` 下同时存在 ``geoip.dat`` 与 ``geosite.dat`` 时，生成路由会为 **私有网段、国内域名与国内 IP**
 走 ``direct``，其余再走代理（``v2ray_geo_split: false`` 可关闭）。
