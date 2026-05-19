@@ -49,17 +49,15 @@ from scripts.lib.v2ray_subscribe import (  # noqa: E402
     write_v2ray_json_from_outbounds,
 )
 
-_CLASH_SUBSCRIBE_UA = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/146.0.0.0 Safari/537.36"
-)
+_CLASH_SUBSCRIBE_UA = "clash-verge/2.2.3"
 
 
 def download_profile(profile_name: str, url: str, *, debug: bool = False) -> bool:
     '''
     下载profile
     '''
-    full_url = f"{url}&flag=clash"
+    sep = "&" if "?" in url else "?"
+    full_url = f"{url}{sep}flag=clash"
 
     logger.info(f'{profile_name} : "{full_url}"')
 
