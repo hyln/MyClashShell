@@ -231,14 +231,34 @@ def _cmd_log(root: Path, args: list[str]) -> int:
     return _journalctl_user("-u", "myclash.service", "-n", "200", "-f", *args)
 
 
+def _share_host() -> str:
+    env_host = os.environ.get("MYCLASH_SHARE_HOST", "").strip()
+    if env_host:
+        return env_host
+    try:
+        result = subprocess.run(
+            ["hostname", "-I"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return "127.0.0.1"
+    for item in result.stdout.split():
+        parts = item.split(".")
+        if len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
+            return item
+    return "127.0.0.1"
+
+
 def _cmd_share(root: Path, args: list[str]) -> int:
-    if args and args[0] not in ("env", "export"):
-        print("用法: myclash share [env|export]", file=sys.stderr)
+    if args:
+        print("用法: myclash share", file=sys.stderr)
         return 2
     doc = _load_user_config(root)
     http = int(doc.get("port") or 7890)
     socks = int(doc.get("socks-port") or 7891)
-    host = os.environ.get("MYCLASH_SHARE_HOST", "").strip() or "127.0.0.1"
+    host = _share_host()
     print("# 直接复制到当前 shell，或手动按需修改后再执行")
     print(f"export http_proxy=http://{host}:{http} https_proxy=http://{host}:{http} ftp_proxy=http://{host}:{http}")
     print(f"export all_proxy=socks5h://{host}:{socks}")
@@ -327,7 +347,7 @@ def _cmd_help() -> int:
 
             其它
               change_subscribe <名>
-              share [env|export]   输出可 eval 的 export（局域网 Master IP；默认 hostname -I 首个 IPv4）
+              share               输出可 eval 的局域网代理 export
               docker-proxy update
               config <子命令>      edit | show
 

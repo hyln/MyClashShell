@@ -22,20 +22,6 @@ _myclash_socks_port() {
     echo "$p"
 }
 
-_myclash_share_host() {
-    if [ -n "${MYCLASH_SHARE_HOST:-}" ]; then
-        echo "${MYCLASH_SHARE_HOST}"
-        return 0
-    fi
-    local ip=""
-    ip=$(hostname -I 2>/dev/null | awk '{print $1}')
-    if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo "$ip"
-        return 0
-    fi
-    echo "127.0.0.1"
-}
-
 _myclash_run_cli() {
     PYTHONPATH="${MYCLASH_ROOT_PWD}" \
         "${MYCLASH_ROOT_PWD}/venv/bin/python3" -m scripts.myclash_cli "$@"
@@ -162,9 +148,6 @@ _myclash()
     case $cmd in
     'myclash')
         COMPREPLY=( $(compgen -W 'service window shell log help change_subscribe ui share docker-proxy config' -- $cur) )
-        ;;
-    'share')
-        COMPREPLY=( $(compgen -W 'env export' -- $cur) )
         ;;
     'docker-proxy')
         COMPREPLY=( $(compgen -W 'update' -- $cur) )
