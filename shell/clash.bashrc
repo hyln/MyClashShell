@@ -169,6 +169,9 @@ _myclash()
     'docker-proxy')
         COMPREPLY=( $(compgen -W 'update' -- $cur) )
         ;;
+    'config')
+        COMPREPLY=( $(compgen -W 'edit show' -- $cur) )
+        ;;
     'service')
         COMPREPLY=( $(compgen -W 'start stop restart status get_logs update_subscribe reload_kernel' -- $cur) ) 
         ;;

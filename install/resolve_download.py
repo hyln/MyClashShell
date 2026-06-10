@@ -126,24 +126,69 @@ def _chmod_tree_rw(path: Path) -> None:
         pass
 
 
+def _format_bytes(n: int) -> str:
+    size = float(max(n, 0))
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            if unit == "B":
+                return f"{int(size)} {unit}"
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} GB"
+
+
+def _progress_hook(label: str):
+    state = {"shown": False}
+
+    def hook(block_count: int, block_size: int, total_size: int) -> None:
+        downloaded = block_count * block_size
+        state["shown"] = True
+        if total_size and total_size > 0:
+            downloaded = min(downloaded, total_size)
+            ratio = downloaded / total_size
+            bar_width = 28
+            filled = min(bar_width, int(ratio * bar_width))
+            bar = "#" * filled + "-" * (bar_width - filled)
+            msg = (
+                f"\rresolve_download: {label} [{bar}] "
+                f"{ratio * 100:5.1f}% {_format_bytes(downloaded)}/{_format_bytes(total_size)}"
+            )
+        else:
+            msg = f"\rresolve_download: {label} 已下载 {_format_bytes(downloaded)}"
+        sys.stdout.write(msg)
+        sys.stdout.flush()
+
+    return hook, state
+
+
 def _download_file(url: str, dest: Path, label: str) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     print(f"resolve_download: 下载 {label} -> {dest}")
+    hook, state = _progress_hook(label)
     try:
-        urlretrieve(url, str(dest))
+        urlretrieve(url, str(dest), reporthook=hook)
     except (OSError, URLError) as exc:
+        if state["shown"]:
+            print()
         print(f"resolve_download: 下载失败 {label}: {exc}", file=sys.stderr)
         sys.exit(1)
+    if state["shown"]:
+        print()
 
 
 def _download_file_optional(url: str, dest: Path, label: str) -> bool:
     dest.parent.mkdir(parents=True, exist_ok=True)
     print(f"resolve_download: 下载 {label} -> {dest}")
+    hook, state = _progress_hook(label)
     try:
-        urlretrieve(url, str(dest))
+        urlretrieve(url, str(dest), reporthook=hook)
     except (OSError, URLError) as exc:
+        if state["shown"]:
+            print()
         print(f"resolve_download: {label} 下载失败，跳过: {exc}", file=sys.stderr)
         return False
+    if state["shown"]:
+        print()
     return True
 
 

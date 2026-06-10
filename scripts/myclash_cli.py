@@ -260,12 +260,54 @@ def _cmd_docker_proxy(root: Path, args: list[str]) -> int:
     return 2
 
 
-def _cmd_yaml_editor(root: Path, args: list[str]) -> int:
-    if args:
-        print("用法: myclash config", file=sys.stderr)
+def _cmd_config(root: Path, args: list[str]) -> int:
+    def print_config_help() -> None:
+        print(
+            dedent(
+                """
+                myclash config <命令>
+
+                  edit    打开 user_config.yaml 编辑器
+                  show    显示当前 user_config.yaml
+                """
+            ).strip()
+        )
+
+    if not args:
+        print_config_help()
         return 2
-    env = {**os.environ, "MYCLASH_ROOT_PWD": str(root)}
-    return _run([str(_python(root)), "-m", "scripts.tui.app_text"], env=env)
+
+    sub = args[0]
+    rest = args[1:]
+    if sub in ("-h", "--help", "help"):
+        if rest:
+            print("用法: myclash config help", file=sys.stderr)
+            return 2
+        print_config_help()
+        return 0
+
+    if sub == "edit":
+        if rest:
+            print("用法: myclash config edit", file=sys.stderr)
+            return 2
+        env = {**os.environ, "MYCLASH_ROOT_PWD": str(root)}
+        return _run([str(_python(root)), "-m", "scripts.tui.app_text"], env=env)
+
+    if sub == "show":
+        if rest:
+            print("用法: myclash config show", file=sys.stderr)
+            return 2
+        config_path = root / "user_config.yaml"
+        try:
+            sys.stdout.write(config_path.read_text(encoding="utf-8"))
+        except OSError as exc:
+            print(f"myclash config show: 无法读取 {config_path}: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    print(f"未知 config 子命令: {sub}", file=sys.stderr)
+    print("用法: myclash config <edit|show>", file=sys.stderr)
+    return 2
 
 
 def _cmd_help() -> int:
@@ -287,7 +329,7 @@ def _cmd_help() -> int:
               change_subscribe <名>
               share [env|export]   输出可 eval 的 export（局域网 Master IP；默认 hostname -I 首个 IPv4）
               docker-proxy update
-              config               打开 YAML 编辑器
+              config <子命令>      edit | show
 
             提示
               · update_subscribe / change_subscribe：会先 shell off，避免经代理拉配置失败；结束后再 shell on
@@ -328,7 +370,7 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "docker-proxy":
         return _cmd_docker_proxy(root, args)
     if cmd == "config":
-        return _cmd_yaml_editor(root, args)
+        return _cmd_config(root, args)
     print(f"unknown command: {cmd}", file=sys.stderr)
     print("use: myclash help", file=sys.stderr)
     return 2
