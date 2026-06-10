@@ -22,6 +22,20 @@ _myclash_socks_port() {
     echo "$p"
 }
 
+_myclash_lan_host() {
+    if [ -n "${MYCLASH_SHARE_HOST:-}" ]; then
+        echo "${MYCLASH_SHARE_HOST}"
+        return 0
+    fi
+    local ip=""
+    ip=$(hostname -I 2>/dev/null | awk '{for (i=1; i<=NF; i++) { if ($i !~ /^127\./) { print $i; exit } }}')
+    if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "$ip"
+        return 0
+    fi
+    echo "127.0.0.1"
+}
+
 _myclash_run_cli() {
     PYTHONPATH="${MYCLASH_ROOT_PWD}" \
         "${MYCLASH_ROOT_PWD}/venv/bin/python3" -m scripts.myclash_cli "$@"
@@ -169,6 +183,33 @@ _myclash()
     esac
 }
 complete -F _myclash myclash
+
+docker_with_proxy()
+{
+    if [ "$#" -eq 0 ]; then
+        echo "用法: docker_with_proxy [build] <docker build 参数...>"
+        echo "示例: docker_with_proxy . -t your/image:tag"
+        return 2
+    fi
+    if [ "${1:-}" = "build" ]; then
+        shift
+    fi
+
+    local _hp="$(_myclash_http_port)"
+    local _host="$(_myclash_lan_host)"
+    local _proxy="http://${_host}:${_hp}/"
+    local _no_proxy="${MYCLASH_DOCKER_NO_PROXY:-localhost,127.0.0.1,::1}"
+
+    echo "docker_with_proxy: ${_proxy}"
+    docker build \
+        --build-arg "HTTP_PROXY=${_proxy}" \
+        --build-arg "HTTPS_PROXY=${_proxy}" \
+        --build-arg "NO_PROXY=${_no_proxy}" \
+        --build-arg "http_proxy=${_proxy}" \
+        --build-arg "https_proxy=${_proxy}" \
+        --build-arg "no_proxy=${_no_proxy}" \
+        "$@"
+}
 
 # Auto start Proxy in Terminal
 shell_proxy_default=$(PYTHONPATH="${MYCLASH_ROOT_PWD}" ${MYCLASH_ROOT_PWD}/venv/bin/python3 -m scripts.tools.read_config_value shell_proxy_default)

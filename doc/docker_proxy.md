@@ -16,7 +16,34 @@
 
 ### build image
 
-TODO
+使用 `docker_with_proxy`，会自动按当前 `user_config.yaml` 的 HTTP 端口和宿主机局域网 IP 注入 build proxy 参数：
+
+```bash
+docker_with_proxy . -t your/image:tag
+```
+
+也兼容保留 `build` 子命令的写法：
+
+```bash
+docker_with_proxy build . -t your/image:tag
+```
+
+等价于执行：
+
+```bash
+docker build . \
+    --build-arg HTTP_PROXY=http://<host-ip>:<http-port>/ \
+    --build-arg HTTPS_PROXY=http://<host-ip>:<http-port>/ \
+    --build-arg NO_PROXY=localhost,127.0.0.1,::1 \
+    -t your/image:tag
+```
+
+如需覆盖宿主机 IP 或 NO_PROXY：
+
+```bash
+MYCLASH_SHARE_HOST=10.42.30.34 docker_with_proxy . -t your/image:tag
+MYCLASH_DOCKER_NO_PROXY=localhost,127.0.0.1,::1,.example.com docker_with_proxy . -t your/image:tag
+```
 
 ### Use Container
 
@@ -48,8 +75,16 @@ Environment="NO_PROXY=localhost,127.0.0.1,.example.com"
 
 ## Dockerfile build
 
+`docker_with_proxy` 只在 build 阶段传入 `--build-arg`，通常不会作为容器运行时环境变量留在最终镜像中。
 
-TODO
+不要在 Dockerfile 中把代理写入 `ENV` 或持久配置文件，例如：
+
+```dockerfile
+ENV HTTP_PROXY=$HTTP_PROXY
+RUN npm config set proxy "$HTTP_PROXY"
+```
+
+这类写法会把代理信息留在镜像层或配置文件里。
 
 ## 在 docker 容器中使用 clash
 
