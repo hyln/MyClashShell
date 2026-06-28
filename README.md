@@ -18,6 +18,9 @@ ubuntu上使用的命令行proxy设置小工具
 
 ```
 myclash #查看当前myclcash状态
+
+myclash config show  # cat 当前配置，
+
 myclash service update_subscribe # 更新订阅
 myclash change_subscribe <订阅名>  # 手动切换订阅(不下载新文件)
 myclash change_subscribe           # 列出当前可用订阅

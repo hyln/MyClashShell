@@ -69,10 +69,10 @@ myclash()
             /usr/bin/gsettings set org.gnome.system.proxy.http port "$_hp"
             /usr/bin/gsettings set org.gnome.system.proxy.https host 127.0.0.1
             /usr/bin/gsettings set org.gnome.system.proxy.https port "$_hp"
-            /usr/bin/gsettings set org.gnome.system.proxy.socks host 127.0.0.1
-            /usr/bin/gsettings set org.gnome.system.proxy.socks port "$_sp"
-            /usr/bin/gsettings set org.gnome.system.proxy.ftp host 127.0.0.1
-            /usr/bin/gsettings set org.gnome.system.proxy.ftp port "$_hp"
+            # /usr/bin/gsettings set org.gnome.system.proxy.socks host 127.0.0.1
+            # /usr/bin/gsettings set org.gnome.system.proxy.socks port "$_sp"
+            # /usr/bin/gsettings set org.gnome.system.proxy.ftp host 127.0.0.1
+            # /usr/bin/gsettings set org.gnome.system.proxy.ftp port "$_hp"
             /usr/bin/gsettings set org.gnome.system.proxy mode manual
             echo "start proxy in Gnome Desktop"
         elif [ "${2:-}" = "off" ]; then
@@ -89,12 +89,12 @@ myclash()
             export http_proxy=http://127.0.0.1:${_hp}
             export https_proxy=http://127.0.0.1:${_hp}
             export ftp_proxy=http://127.0.0.1:${_hp}
-            export all_proxy=socks5h://127.0.0.1:${_sp}
+            # export all_proxy=socks5h://127.0.0.1:${_sp}
             export no_proxy=127.0.0.1,localhost
             export HTTP_PROXY=http://127.0.0.1:${_hp}
             export HTTPS_PROXY=http://127.0.0.1:${_hp}
             export FTP_PROXY=http://127.0.0.1:${_hp}
-            export ALL_PROXY=socks5h://127.0.0.1:${_sp}
+            # export ALL_PROXY=socks5h://127.0.0.1:${_sp}
             export NO_PROXY=127.0.0.1,localhost
 
             echo "start proxy in Terminal"
