@@ -4,10 +4,10 @@ mihomo:
   amd64: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/mihomo-linux-amd64-v1.19.24.gz
   armv7: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/mihomo-linux-armv7-v1.19.24.gz
   arm64: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/mihomo-linux-arm64-v1.19.24.gz
-v2ray:
-  amd64: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/v2-linux-64.zip
-  armv7: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/v2-linux-arm32-v7a.zip
-  arm64: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/v2-linux-arm64-v8a.zip
+xray:
+  amd64: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/X2-linux-64.zip
+  armv7: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/X2-linux-arm32-v7a.zip
+  arm64: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/X2-linux-arm64-v8a.zip
 mmdb: https://gitee.com/wangdaochuan/resource_backup/releases/download/cat_dependencies/Country.mmdb
 geoip: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/geoip.dat
 geosite: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/geosite.dat

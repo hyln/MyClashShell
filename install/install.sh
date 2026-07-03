@@ -119,14 +119,15 @@ install_mcs() {
 	gunzip -c "$CLASH_GZ" >"${MYCLASH_ROOT_PWD}/mcs/bin/clash"
 	chmod +x "${MYCLASH_ROOT_PWD}/mcs/bin/clash"
 
-	V2_SRC="${CACHE_DL}/v2ray"
-	if [ ! -f "$V2_SRC" ]; then
-		V2_SRC="${MYCLASH_ROOT_PWD}/cache/v2ray"
+	XRAY_SRC="${CACHE_DL}/xray"
+	if [ ! -f "$XRAY_SRC" ]; then
+		XRAY_SRC="${MYCLASH_ROOT_PWD}/cache/xray"
 	fi
-	if [ -f "$V2_SRC" ]; then
-		cp -f "$V2_SRC" "${MYCLASH_ROOT_PWD}/mcs/bin/v2ray"
-		chmod +x "${MYCLASH_ROOT_PWD}/mcs/bin/v2ray"
-		echo "已从 ${V2_SRC} 复制 v2ray 到 mcs/bin/"
+	if [ -f "$XRAY_SRC" ]; then
+		cp -f "$XRAY_SRC" "${MYCLASH_ROOT_PWD}/mcs/bin/xray"
+		chmod +x "${MYCLASH_ROOT_PWD}/mcs/bin/xray"
+		rm -f "${MYCLASH_ROOT_PWD}/mcs/bin/v2ray"
+		echo "已从 ${XRAY_SRC} 复制 xray 到 mcs/bin/"
 	fi
 
 	MMDB_SRC="${CACHE_DL}/Country.mmdb"

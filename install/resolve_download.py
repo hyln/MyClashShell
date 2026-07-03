@@ -4,7 +4,7 @@
 子命令:
   install-cache   创建 cache/download/、安装 pip 依赖、下载 mihomo → cache/download/clash.gz、Country.mmdb、
                   geoip.dat / geosite.dat（install/download.yaml 中 ``geoip`` / ``geosite``）、
-                  可选下载并解压 v2ray 到 cache/download/v2ray（供 install.sh 再 cp 到 mcs/bin/）
+                  可选下载并解压 xray 到 cache/download/xray（供 install.sh 再 cp 到 mcs/bin/）
   url SECTION [ARCH]  仅打印一条 URL（SECTION 为 mmdb / geoip / geosite 时不带 ARCH；clash/mihomo/mihoyo 均指向 mihomo 段）
 
 环境变量 MYCLASH_ROOT_PWD 须指向仓库根。
@@ -36,7 +36,7 @@ from scripts.lib.paths import (  # noqa: E402
     repo_cache_dir,
 )
 
-_V2RAY_NAMES = ("v2ray", "xray")
+_XRAY_BIN_NAMES = ("xray",)
 
 # download.yaml 中内核段键名；url 子命令中 clash / mihoyo 视为别名（配置侧仍用 backend: clash）
 _YAML_KERNEL_SECTION = "mihomo"
@@ -77,7 +77,7 @@ def _url_from_doc(data: dict, section: str, arch: str | None) -> str:
             raise ValueError("缺少 mmdb URL")
         return url.strip()
     if not arch:
-        raise ValueError("clash/mihomo/v2ray 须指定 arch")
+        raise ValueError("clash/mihomo/xray 须指定 arch")
     section = _yaml_section_for_url(section)
     block = data.get(section)
     if not isinstance(block, dict):
@@ -95,9 +95,9 @@ def _geo_asset_url(data: dict, key: str) -> str | None:
     return None
 
 
-def _optional_v2ray_url(data: dict, arch: str) -> str | None:
+def _optional_xray_url(data: dict, arch: str) -> str | None:
     try:
-        return _url_from_doc(data, "v2ray", arch)
+        return _url_from_doc(data, "xray", arch)
     except ValueError:
         return None
 
@@ -192,8 +192,8 @@ def _download_file_optional(url: str, dest: Path, label: str) -> bool:
     return True
 
 
-def _find_v2ray_binary(unzip_dir: Path) -> Path | None:
-    for name in _V2RAY_NAMES:
+def _find_xray_binary(unzip_dir: Path) -> Path | None:
+    for name in _XRAY_BIN_NAMES:
         for p in unzip_dir.rglob(name):
             if p.is_file():
                 return p
@@ -276,34 +276,33 @@ def cmd_install_cache() -> None:
                 file=sys.stderr,
             )
 
-    v2_url = _optional_v2ray_url(data, arch)
-    if not v2_url:
-        print("resolve_download: 无 v2ray URL，跳过 v2ray 二进制", file=sys.stderr)
+    xray_url = _optional_xray_url(data, arch)
+    if not xray_url:
+        print("resolve_download: 无 xray URL，跳过 xray 二进制", file=sys.stderr)
         return
 
-    shutil.rmtree(dload / "v2ray_unzip", ignore_errors=True)
-    zip_path = dload / "v2ray.zip"
-    v2_bin = dload / "v2ray"
+    zip_path = dload / "xray.zip"
+    xray_bin = dload / "xray"
     if zip_path.is_file():
-        print("resolve_download: cache/download/v2ray.zip 已存在，跳过下载")
-    elif not _download_file_optional(v2_url, zip_path, "v2ray zip"):
+        print("resolve_download: cache/download/xray.zip 已存在，跳过下载")
+    elif not _download_file_optional(xray_url, zip_path, "xray zip"):
         return
 
-    with tempfile.TemporaryDirectory(prefix="v2ray_uz_", dir=str(dload)) as udz:
+    with tempfile.TemporaryDirectory(prefix="xray_uz_", dir=str(dload)) as udz:
         uz_path = Path(udz)
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
                 zf.extractall(uz_path)
         except zipfile.BadZipFile as exc:
-            print(f"resolve_download: v2ray zip 损坏，跳过: {exc}", file=sys.stderr)
+            print(f"resolve_download: xray zip 损坏，跳过: {exc}", file=sys.stderr)
             return
-        found = _find_v2ray_binary(uz_path)
+        found = _find_xray_binary(uz_path)
         if found is None:
-            print("resolve_download: zip 中未找到 v2ray/xray，跳过", file=sys.stderr)
+            print("resolve_download: zip 中未找到 xray，跳过", file=sys.stderr)
             return
-        shutil.copy2(found, v2_bin)
-    v2_bin.chmod(v2_bin.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    print(f"resolve_download: 已写入 {v2_bin}")
+        shutil.copy2(found, xray_bin)
+    xray_bin.chmod(xray_bin.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    print(f"resolve_download: 已写入 {xray_bin}")
 
 
 def cmd_url(section: str, arch: str | None) -> None:
@@ -336,13 +335,13 @@ def main() -> None:
 
     sub.add_parser(
         "install-cache",
-        help="下载 mihomo（cache/download/clash.gz）/ mmdb / geoip.dat / geosite.dat / v2ray 到 cache/download/",
+        help="下载 mihomo（cache/download/clash.gz）/ mmdb / geoip.dat / geosite.dat / xray 到 cache/download/",
     )
 
     p_url = sub.add_parser("url", help="打印单条 URL")
     p_url.add_argument(
         "section",
-        choices=("clash", "mihomo", "mihoyo", "v2ray", "mmdb", "geoip", "geosite"),
+        choices=("clash", "mihomo", "mihoyo", "xray", "mmdb", "geoip", "geosite"),
     )
     p_url.add_argument(
         "arch",
@@ -357,7 +356,7 @@ def main() -> None:
         no_arch = args.section in ("mmdb", "geoip", "geosite")
         arch = None if no_arch else args.arch
         if not no_arch and not arch:
-            print("resolve_download: clash/mihomo/mihoyo/v2ray 须指定 arch", file=sys.stderr)
+            print("resolve_download: clash/mihomo/mihoyo/xray 须指定 arch", file=sys.stderr)
             sys.exit(2)
         cmd_url(args.section, arch)
     else:

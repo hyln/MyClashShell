@@ -108,9 +108,14 @@ def migrate_legacy_cache_layout(root: Path | None = None) -> None:
         sb = subscribe_cache_dir(base)
         dl.mkdir(parents=True, exist_ok=True)
         sb.mkdir(parents=True, exist_ok=True)
-        for name in ("clash.gz", "Country.mmdb", "geoip.dat", "geosite.dat", "v2ray.zip", "v2ray"):
+        for name in ("clash.gz", "Country.mmdb", "geoip.dat", "geosite.dat", "xray.zip", "xray"):
             src = cr / name
             dst = dl / name
+            if src.is_file() and not dst.is_file():
+                shutil.move(str(src), str(dst))
+        for old, new in (("v2ray.zip", "xray.zip"), ("v2ray", "xray")):
+            src = cr / old
+            dst = dl / new
             if src.is_file() and not dst.is_file():
                 shutil.move(str(src), str(dst))
         legacy_cs = sb / "current_sub.txt"
@@ -150,8 +155,8 @@ def clash_executable(root: Path | None = None) -> Path:
     return mcs_bin_dir(root) / "clash"
 
 
-def v2ray_executable(root: Path | None = None) -> Path:
-    return mcs_bin_dir(root) / "v2ray"
+def xray_executable(root: Path | None = None) -> Path:
+    return mcs_bin_dir(root) / "xray"
 
 
 def clash_config_yaml(root: Path | None = None) -> Path:

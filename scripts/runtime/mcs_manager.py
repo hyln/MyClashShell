@@ -53,7 +53,7 @@ from scripts.lib.paths import (  # noqa: E402
     current_sub_txt_path,
     mcs_configs_dir,
     migrate_legacy_cache_layout,
-    v2ray_executable,
+    xray_executable,
     v2ray_geo_asset_dir,
 )
 from scripts.lib.subscribe import parse_subscribes, resolve_default_subscribe_name  # noqa: E402
@@ -137,10 +137,10 @@ class BackendManager:
 
     def spawn_child(self, backend: str) -> subprocess.Popen | None:
         if backend == "v2ray":
-            exe = v2ray_executable(self._root)
+            exe = xray_executable(self._root)
             cfg = mcs_configs_dir(self._root) / "v2ray.json"
             if not exe.is_file():
-                print(f"mcs_manager: v2ray binary not found: {exe}", file=sys.stderr)
+                print(f"mcs_manager: xray binary not found: {exe}", file=sys.stderr)
                 return None
             if not cfg.is_file():
                 print(f"mcs_manager: v2ray config not found: {cfg}", file=sys.stderr)

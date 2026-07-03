@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from scripts.lib.paths import repo_root_from_env, v2ray_executable
+from scripts.lib.paths import repo_root_from_env, xray_executable
 from scripts.lib.v2ray_subscribe import _proxy_outbounds_from_saved_v2ray
 
 
@@ -81,15 +81,15 @@ def _curl_through_socks(socks_port: int, url: str, max_time: float) -> bool:
 
 def measure_proxy_delay_ms(
     *,
-    v2ray_exe: Path,
+    xray_exe: Path,
     proxy_ob: dict[str, Any],
     test_url: str,
     curl_timeout: float = 4.0,
     listen_ready_timeout: float = 8.0,
     process_grace: float = 2.0,
 ) -> int | None:
-    """为单条 outbound 起临时 v2ray/Xray，经 SOCKS 访问 ``test_url``，返回耗时毫秒；失败为 ``None``。"""
-    if not v2ray_exe.is_file():
+    """为单条 outbound 起临时 Xray，经 SOCKS 访问 ``test_url``，返回耗时毫秒；失败为 ``None``。"""
+    if not xray_exe.is_file():
         return None
     if shutil.which("curl") is None:
         return None
@@ -101,7 +101,7 @@ def measure_proxy_delay_ms(
     try:
         Path(path).write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
         proc = subprocess.Popen(
-            [str(v2ray_exe), "run", "-config", path],
+            [str(xray_exe), "run", "-config", path],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )

@@ -13,7 +13,7 @@ from textual.binding import Binding
 from textual.coordinate import Coordinate
 from textual.widgets import DataTable, Footer, Static
 
-from scripts.lib.paths import v2ray_executable
+from scripts.lib.paths import xray_executable
 from scripts.lib.v2ray_delay_test import measure_proxy_delay_ms
 from scripts.lib.v2ray_persist import (
     apply_v2ray_outbound_selection,
@@ -160,14 +160,14 @@ class V2rayPickerApp(App[None]):
 
     @work(thread=True, exclusive=True)
     def _run_test_all(self) -> None:
-        exe = v2ray_executable(self._root)
+        exe = xray_executable(self._root)
         url = os.environ.get("MYCLASH_TUI_TEST_URL", "https://www.gstatic.com/generate_204")
         timeout = float(os.environ.get("MYCLASH_V2RAY_PING_CURL_TIMEOUT", "4"))
         listen_wait = float(os.environ.get("MYCLASH_V2RAY_PING_LISTEN_WAIT", "8"))
 
         def one(i: int, ob: dict) -> tuple[int, int | None]:
             ms = measure_proxy_delay_ms(
-                v2ray_exe=exe,
+                xray_exe=exe,
                 proxy_ob=ob,
                 test_url=url,
                 curl_timeout=timeout,
@@ -206,14 +206,14 @@ class V2rayPickerApp(App[None]):
 
     @work(thread=True, exclusive=True)
     def _run_test_row(self, row: int) -> None:
-        exe = v2ray_executable(self._root)
+        exe = xray_executable(self._root)
         url = os.environ.get("MYCLASH_TUI_TEST_URL", "https://www.gstatic.com/generate_204")
         timeout = float(os.environ.get("MYCLASH_V2RAY_PING_CURL_TIMEOUT", "4"))
         listen_wait = float(os.environ.get("MYCLASH_V2RAY_PING_LISTEN_WAIT", "8"))
         ms: int | None = None
         try:
             ms = measure_proxy_delay_ms(
-                v2ray_exe=exe,
+                xray_exe=exe,
                 proxy_ob=self._obs[row],
                 test_url=url,
                 curl_timeout=timeout,

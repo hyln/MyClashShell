@@ -22,7 +22,7 @@ _repo = Path(__file__).resolve().parents[2]
 if str(_repo) not in sys.path:
     sys.path.insert(0, str(_repo))
 
-from scripts.lib.paths import repo_root_from_env, v2ray_executable  # noqa: E402
+from scripts.lib.paths import repo_root_from_env, xray_executable  # noqa: E402
 from scripts.lib.v2ray_delay_test import (  # noqa: E402
     default_v2ray_config_path,
     list_proxy_outbounds_from_file,
@@ -54,7 +54,7 @@ def main() -> int:
         print("v2ray_ping: 请设置 MYCLASH_ROOT_PWD 或从仓库根运行", file=sys.stderr)
         return 2
     cfg_path = args.config if args.config is not None else default_v2ray_config_path(root)
-    exe = v2ray_executable(root)
+    exe = xray_executable(root)
     if not exe.is_file():
         print(f"v2ray_ping: 未找到内核可执行文件: {exe}", file=sys.stderr)
         return 2
@@ -73,7 +73,7 @@ def main() -> int:
     for ob in obs:
         tag = str(ob.get("tag") or "?")
         ms = measure_proxy_delay_ms(
-            v2ray_exe=exe,
+            xray_exe=exe,
             proxy_ob=ob,
             test_url=args.url,
             curl_timeout=args.curl_timeout,
