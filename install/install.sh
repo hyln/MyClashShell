@@ -9,6 +9,44 @@ export MYCLASH_ROOT_PWD=$(realpath "${SCRIPT_DIR}/..")
 source "${MYCLASH_ROOT_PWD}/scripts/tools/common_func.sh"
 source "${MYCLASH_ROOT_PWD}/install/prompt.sh"
 
+mcs_pid1_comm() {
+	ps -p 1 -o comm= 2>/dev/null | tr -d ' \t\r\n'
+}
+
+mcs_systemd_user_available() {
+	if ! command -v systemctl >/dev/null 2>&1; then
+		return 1
+	fi
+	if [ "$(mcs_pid1_comm)" != "systemd" ]; then
+		return 1
+	fi
+	if [ "${EUID:-0}" -eq 0 ]; then
+		[ -d /run/user/0 ] || return 1
+	fi
+	return 0
+}
+
+mcs_service_mode() {
+	local mode="${MYCLASH_SERVICE_MODE:-auto}"
+	case "$mode" in
+		systemd|direct)
+			echo "$mode"
+			return 0
+			;;
+		auto|"")
+			if mcs_systemd_user_available; then
+				echo "systemd"
+			else
+				echo "direct"
+			fi
+			return 0
+			;;
+		*)
+			failed_and_exit "MYCLASH_SERVICE_MODE 仅支持 auto/systemd/direct，当前: $mode"
+			;;
+	esac
+}
+
 mcs_print_root_install_notice() {
 	if [ "${EUID:-0}" -ne 0 ]; then
 		return 0
@@ -35,7 +73,7 @@ fi
 # root（sudo）：/run/user/0 常不存在，仅提示，不因此退出。
 mcs_require_pid1_systemd() {
 	local p1
-	p1=$(ps -p 1 -o comm= 2>/dev/null | tr -d ' \t\r\n')
+	p1=$(mcs_pid1_comm)
 	if [ "$p1" != "systemd" ]; then
 		failed_and_exit "未检测到 systemd 作为 PID 1（ps -p 1 -o comm= 得到: ${p1:-空}）。本安装需要 systemd 作为 init。"
 	fi
@@ -62,7 +100,13 @@ mcs_require_systemd_user_env() {
 	fi
 }
 
-mcs_require_systemd_user_env
+SERVICE_MODE=$(mcs_service_mode)
+if [ "$SERVICE_MODE" = "systemd" ]; then
+	mcs_require_pid1_systemd
+	mcs_require_systemd_user_env
+else
+	echo "未使用 systemd 用户服务；将以 direct 模式安装（适用于 Docker/K8s 等容器环境）。"
+fi
 
 mkvenv() {
 	local ENV_NAME=${1:-venv}
@@ -195,25 +239,31 @@ install_mcs() {
 		chmod u+rw "${MYCLASH_ROOT_PWD}/mcs/configs/v2ray.json"
 	fi
 
-	echo "设置 systemd 用户服务（systemctl --user）"
-	USER_UNIT_DIR="${HOME}/.config/systemd/user"
-	mkdir -p "${USER_UNIT_DIR}"
 	mkdir -p "${MYCLASH_ROOT_PWD}/cache"
-	systemctl --user stop myclash.service 2>/dev/null || true
-	systemctl --user disable myclash.service 2>/dev/null || true
+	echo "$SERVICE_MODE" >"${MYCLASH_ROOT_PWD}/cache/service_mode"
+	if [ "$SERVICE_MODE" = "systemd" ]; then
+		echo "设置 systemd 用户服务（systemctl --user）"
+		USER_UNIT_DIR="${HOME}/.config/systemd/user"
+		mkdir -p "${USER_UNIT_DIR}"
+		systemctl --user stop myclash.service 2>/dev/null || true
+		systemctl --user disable myclash.service 2>/dev/null || true
 
-	"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/runtime/gen_placehold_fill_file.py" \
-		"${MYCLASH_ROOT_PWD}/install/templates/myclash.service" \
-		"${MYCLASH_ROOT_PWD}/cache/myclash.service.gen" \
-		"${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}"
-	cp "${MYCLASH_ROOT_PWD}/cache/myclash.service.gen" "${USER_UNIT_DIR}/myclash.service"
-	chmod 0644 "${USER_UNIT_DIR}/myclash.service"
-	rm -f "${MYCLASH_ROOT_PWD}/cache/myclash.service.gen"
+		"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/runtime/gen_placehold_fill_file.py" \
+			"${MYCLASH_ROOT_PWD}/install/templates/myclash.service" \
+			"${MYCLASH_ROOT_PWD}/cache/myclash.service.gen" \
+			"${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}"
+		cp "${MYCLASH_ROOT_PWD}/cache/myclash.service.gen" "${USER_UNIT_DIR}/myclash.service"
+		chmod 0644 "${USER_UNIT_DIR}/myclash.service"
+		rm -f "${MYCLASH_ROOT_PWD}/cache/myclash.service.gen"
 
-	systemctl --user daemon-reload
-	print_err_and_exit_if_failed "systemctl --user daemon-reload 失败"
-	if ! systemctl --user enable --now myclash.service; then
-		echo "提示: systemctl --user enable --now 失败时，请重新登录或 SSH 后再执行 myclash service start；无会话机器可: sudo loginctl enable-linger $(id -un)" >&2
+		systemctl --user daemon-reload
+		print_err_and_exit_if_failed "systemctl --user daemon-reload 失败"
+		if ! systemctl --user enable --now myclash.service; then
+			echo "提示: systemctl --user enable --now 失败时，请重新登录或 SSH 后再执行 myclash service start；无会话机器可: sudo loginctl enable-linger $(id -un)" >&2
+		fi
+	else
+		echo "设置 direct 服务模式（pid/log 默认位于 /tmp/myclash-runtime/；可用 MYCLASH_RUNTIME_DIR 覆盖）"
+		"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/myclash_cli.py" service restart
 	fi
 }
 
@@ -227,8 +277,10 @@ install_mcs() {
 cat "${MYCLASH_ROOT_PWD}/scripts/tools/logo.txt"
 mcs_print_root_install_notice
 myclashinfo_welcome
-read -n 1 -s -r -p "Press any key to continue..." key
-echo
+if [ "${MYCLASH_ASSUME_YES:-0}" != "1" ]; then
+	read -n 1 -s -r -p "Press any key to continue..." key
+	echo
+fi
 mkvenv || failed_and_exit "虚拟环境创建失败"
 download_clash
 

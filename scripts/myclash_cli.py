@@ -10,8 +10,10 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 from textwrap import dedent
 
@@ -185,6 +187,175 @@ def _run(cmd: list[str], *, env: dict[str, str] | None = None) -> int:
     return proc.returncode
 
 
+def _runtime_dir() -> Path:
+    env_dir = os.environ.get("MYCLASH_RUNTIME_DIR", "").strip()
+    if env_dir:
+        return Path(env_dir).expanduser()
+    return Path("/tmp") / "myclash-runtime"
+
+
+def _pid_file(root: Path) -> Path:
+    return _runtime_dir() / "myclash.pid"
+
+
+def _log_file(root: Path) -> Path:
+    return _runtime_dir() / "myclash.log"
+
+
+def _read_pid(root: Path) -> int | None:
+    try:
+        raw = _pid_file(root).read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not raw.isdigit():
+        return None
+    return int(raw)
+
+
+def _pid_alive(pid: int | None) -> bool:
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _pid_is_myclash_manager(root: Path, pid: int | None) -> bool:
+    if not _pid_alive(pid):
+        return False
+    assert pid is not None
+    cmdline = Path(f"/proc/{pid}/cmdline")
+    if not cmdline.exists():
+        return True
+    try:
+        parts = [p for p in cmdline.read_bytes().split(b"\0") if p]
+    except OSError:
+        return True
+    text = " ".join(part.decode("utf-8", errors="ignore") for part in parts)
+    return "scripts/runtime/mcs_manager.py" in text and str(root) in text
+
+
+def _service_mode(root: Path) -> str:
+    env_mode = os.environ.get("MYCLASH_SERVICE_MODE", "").strip().lower()
+    if env_mode in ("systemd", "direct"):
+        return env_mode
+    mode_file = root / "cache" / "service_mode"
+    try:
+        mode = mode_file.read_text(encoding="utf-8").strip().lower()
+    except OSError:
+        mode = ""
+    if mode in ("systemd", "direct"):
+        return mode
+    if not Path("/run/systemd/system").exists():
+        return "direct"
+    return "systemd"
+
+
+def _direct_start(root: Path) -> int:
+    pid = _read_pid(root)
+    if _pid_is_myclash_manager(root, pid):
+        print(f"myclash direct service already running (pid={pid})")
+        return 0
+    if pid is not None:
+        try:
+            _pid_file(root).unlink()
+        except OSError:
+            pass
+
+    runtime = _runtime_dir()
+    runtime.mkdir(parents=True, exist_ok=True)
+    env = {**os.environ, "MYCLASH_ROOT_PWD": str(root)}
+    log_path = _log_file(root)
+    log = log_path.open("ab")
+    proc = subprocess.Popen(
+        [str(_python(root)), str(root / "scripts/runtime/mcs_manager.py")],
+        cwd=str(root),
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+        close_fds=True,
+    )
+    log.close()
+    _pid_file(root).write_text(f"{proc.pid}\n", encoding="utf-8")
+    try:
+        (root / "cache" / "service_mode").write_text("direct\n", encoding="utf-8")
+    except OSError:
+        pass
+    print(f"myclash direct service started (pid={proc.pid}, runtime={runtime}, log={log_path})")
+    return 0
+
+
+def _direct_run(root: Path) -> int:
+    env = {**os.environ, "MYCLASH_ROOT_PWD": str(root)}
+    os.execve(str(_python(root)), [str(_python(root)), str(root / "scripts/runtime/mcs_manager.py")], env)
+    return 1
+
+
+def _direct_stop(root: Path) -> int:
+    pid = _read_pid(root)
+    if not _pid_is_myclash_manager(root, pid):
+        try:
+            _pid_file(root).unlink()
+        except OSError:
+            pass
+        print("myclash direct service is not running")
+        return 0
+    assert pid is not None
+    try:
+        os.killpg(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    except PermissionError as exc:
+        print(f"myclash direct service stop failed: {exc}", file=sys.stderr)
+        return 1
+    except OSError:
+        os.kill(pid, signal.SIGTERM)
+
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        if not _pid_alive(pid):
+            break
+        time.sleep(0.2)
+    if _pid_alive(pid):
+        try:
+            os.killpg(pid, signal.SIGKILL)
+        except OSError:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+    try:
+        _pid_file(root).unlink()
+    except OSError:
+        pass
+    print("myclash direct service stopped")
+    return 0
+
+
+def _direct_status(root: Path) -> int:
+    pid = _read_pid(root)
+    if _pid_is_myclash_manager(root, pid):
+        print(f"myclash direct service active (pid={pid})")
+        return 0
+    print("myclash direct service inactive")
+    return 3
+
+
+def _direct_logs(root: Path, args: list[str]) -> int:
+    log_path = _log_file(root)
+    if not log_path.exists():
+        print(f"myclash direct log not found: {log_path}", file=sys.stderr)
+        return 1
+    tail_args = args or ["-n", "200", "-f"]
+    return _run(["tail", *tail_args, str(log_path)])
+
+
 def _systemctl_user(*args: str) -> int:
     return _run(["systemctl", "--user", *args])
 
@@ -207,8 +378,25 @@ def _cmd_service(root: Path, args: list[str]) -> int:
         return print_status()
     sub = args[0]
     rest = args[1:]
+    mode = _service_mode(root)
+    if mode == "direct":
+        if sub == "run":
+            return _direct_run(root)
+        if sub == "start":
+            return _direct_start(root)
+        if sub == "stop":
+            return _direct_stop(root)
+        if sub == "restart":
+            rc = _direct_stop(root)
+            return rc if rc != 0 else _direct_start(root)
+        if sub == "status":
+            return _direct_status(root)
+        if sub == "get_logs":
+            return _direct_logs(root, rest)
     if sub == "start":
         return _systemctl_user("start", "myclash.service")
+    if sub == "run":
+        return _direct_run(root)
     if sub == "stop":
         return _systemctl_user("stop", "myclash.service")
     if sub == "restart":
@@ -228,6 +416,8 @@ def _cmd_service(root: Path, args: list[str]) -> int:
 
 
 def _cmd_log(root: Path, args: list[str]) -> int:
+    if _service_mode(root) == "direct":
+        return _direct_logs(root, args)
     return _journalctl_user("-u", "myclash.service", "-n", "200", "-f", *args)
 
 
@@ -338,8 +528,8 @@ def _cmd_help() -> int:
 
             服务与日志
               service <子命令>  start | stop | restart | status | get_logs
-                                | update_subscribe | reload_kernel
-              log [journalctl…] 跟踪 myclash.service（mcs + 内核）
+                                | run | update_subscribe | reload_kernel
+              log [参数…]       跟踪 myclash.service 或 direct 模式日志（mcs + 内核）
 
             代理
               shell on|off         当前 shell（默认见 user_config.shell_proxy_default）
@@ -354,8 +544,9 @@ def _cmd_help() -> int:
             提示
               · update_subscribe / change_subscribe：会先 shell off，避免经代理拉配置失败；结束后再 shell on
               · reload_kernel：只重启 clash/v2ray 子进程
+              · run：前台运行 mcs_manager，适合 Docker/K8s entrypoint
               · API 端口见 cache/current_mcs_port.txt；池见 user_config.mcs_api_port_range
-              · get_logs / log：journalctl --user；无登录会话：loginctl enable-linger <用户>
+              · get_logs / log：systemd 模式走 journalctl --user；direct 模式走 MYCLASH_RUNTIME_DIR 或 /tmp/myclash-runtime/myclash.log
               · 无子命令：打印状态卡片
             """
         ).strip()

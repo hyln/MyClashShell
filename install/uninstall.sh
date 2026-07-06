@@ -2,13 +2,22 @@
 # 普通用户执行：移除 ~/.config/systemd/user/myclash.service、~/.bashrc 中片段、本仓库下 mcs/（可选逻辑保留与旧版一致）
 # 若曾安装系统级单元，请先: sudo ./install/uninstall_root.sh
 
-if [ "${EUID:-0}" -eq 0 ]; then
-	echo "请勿以 root 执行 uninstall.sh。系统级清理请: sudo ./install/uninstall_root.sh" >&2
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+MYCLASH_ROOT_PWD=$(realpath "${SCRIPT_DIR}/..")
+SERVICE_MODE=""
+if [ -f "${MYCLASH_ROOT_PWD}/cache/service_mode" ]; then
+	SERVICE_MODE=$(tr -d ' \t\r\n' <"${MYCLASH_ROOT_PWD}/cache/service_mode")
+fi
+
+if [ "${EUID:-0}" -eq 0 ] && [ "$SERVICE_MODE" != "direct" ]; then
+	echo "请勿以 root 执行 uninstall.sh。系统级清理请: sudo ./install/uninstall_root.sh；容器 direct 模式可直接执行。" >&2
 	exit 1
 fi
 
-SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-MYCLASH_ROOT_PWD=$(realpath "${SCRIPT_DIR}/..")
+if [ -x "${MYCLASH_ROOT_PWD}/venv/bin/python3" ] && [ -f "${MYCLASH_ROOT_PWD}/scripts/myclash_cli.py" ]; then
+	echo "停止 MyClash 服务（若正在运行）"
+	MYCLASH_ROOT_PWD="${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/myclash_cli.py" service stop 2>/dev/null || true
+fi
 
 echo "停止/移除用户级 myclash.service"
 systemctl --user stop myclash.service 2>/dev/null || true

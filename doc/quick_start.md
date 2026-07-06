@@ -42,6 +42,31 @@ source ~/.bashrc
 > 填写完成后请输入 `myclash service update_subscribe` 下载并载入订阅。
 <!-- > 设置完代理后执行 `myclash service restart`（systemd **用户**服务，无需 sudo） -->
 
+### Docker / K8s（无 systemd）
+
+容器里通常没有 systemd，可使用 direct 模式安装与运行。direct 模式不会注册 `systemd --user`，而是由 `myclash service start|stop|restart` 直接管理 `scripts/runtime/mcs_manager.py`。PID 与日志默认位于 `/tmp/myclash-runtime/`，可用 `MYCLASH_RUNTIME_DIR` 覆盖。
+
+```bash
+MYCLASH_SERVICE_MODE=direct MYCLASH_ASSUME_YES=1 ./install/install.sh
+source ~/.bashrc
+myclash service status
+myclash log
+```
+
+也可以不显式设置 `MYCLASH_SERVICE_MODE`：安装脚本会在检测不到 systemd 用户服务时自动切到 direct。`MYCLASH_ASSUME_YES=1` 用于跳过安装前的按键确认，适合 Dockerfile、CI、K8s initContainer。
+
+如需把运行态放到其它目录（例如 K8s `emptyDir` 挂载），可设置：
+
+```bash
+export MYCLASH_RUNTIME_DIR=/tmp/myclash-runtime
+```
+
+K8s/容器入口可直接使用：
+
+```bash
+myclash service run
+```
+
 ## 卸载
 
 **卸载**：普通用户 `./install/uninstall.sh`（用户 systemd、`~/.bashrc`、本仓库下 `mcs/`）；若曾装过旧版系统服务，再执行 **`sudo ./install/uninstall_root.sh`**。最后可手动删除整个仓库目录。
@@ -86,4 +111,3 @@ subscribes:
     backend: v2ray
 default_subscribe: "DEFAULT"
 ```
-
