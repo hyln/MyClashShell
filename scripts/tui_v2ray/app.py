@@ -32,7 +32,6 @@ class V2rayPickerApp(App[None]):
     CSS = """
     Screen { background: $surface; }
     #title { padding: 0 1; margin: 0 0 0 0; color: $text-muted; }
-    #hint { padding: 0 1 1 1; color: $text; text-style: bold; }
     #active-banner {
         padding: 0 1 1 1;
         border: round $success;
@@ -49,15 +48,7 @@ class V2rayPickerApp(App[None]):
         Binding("escape", "quit", "退出", show=False),
         Binding("t", "test_all", "全部测速", show=True),
         Binding("r", "test_row", "测当前行", show=True),
-        # DataTable 聚焦时会先吃掉 Enter；priority 让 App 优先处理
-        Binding(
-            "enter",
-            "activate",
-            "Enter选用",
-            show=True,
-            priority=True,
-        ),
-        Binding("ctrl+o", "activate", "Ctrl+O选用", show=True),
+        Binding("enter", "activate", "选用", show=True, priority=True),
         Binding("c", "clear_fixed", "取消固定", show=True),
     ]
 
@@ -78,7 +69,6 @@ class V2rayPickerApp(App[None]):
 
     def compose(self) -> ComposeResult:
         yield Static("", id="title")
-        yield Static("", id="hint")
         yield Static("", id="active-banner")
         yield DataTable(show_header=True, cursor_type="row", zebra_stripes=True, id="nodes")
         yield Static("", id="status")
@@ -93,15 +83,7 @@ class V2rayPickerApp(App[None]):
             self.set_timer(0.2, lambda: self.exit(1))
             return
 
-        title = self.query_one("#title", Static)
-        title.update(
-            f"默认订阅: [b]{self._eff}[/]  ·  [t]全部测速  [r]测当前行  "
-            f"[c]取消固定  [q]退出"
-        )
-        self.query_one("#hint", Static).update(
-            "↑↓ 选中一行后按 [b]Enter[/b] 或 [b]Ctrl+O[/b] → 立即写回并由 mcs 热重载 v2ray。"
-            "若 Enter 无反应请试 [b]Ctrl+O[/b]；焦点须在表格上（可 Tab 或鼠标点表格）。"
-        )
+        self.query_one("#title", Static).update(f"默认订阅: [b]{self._eff}[/]")
         self._refresh_active_banner()
         table = self.query_one("#nodes", DataTable)
         table.add_columns("在用标记", "节点 tag", "延迟", "协议")
@@ -111,7 +93,6 @@ class V2rayPickerApp(App[None]):
             mark = "  ◄◄ 当前出口  ►►  " if active and tag == active else ""
             proto = str(ob.get("protocol") or "?")
             table.add_row(mark, tag, "—", proto)
-        self._set_status("就绪。测速后用 ↑↓ 选中节点，Enter 立即生效。")
         table.focus()
 
     def _table(self) -> DataTable:
@@ -124,12 +105,9 @@ class V2rayPickerApp(App[None]):
         ban = self.query_one("#active-banner", Static)
         active = fixed_routing_outbound_tag_from_mcs(self._root)
         if active:
-            ban.update(f"[bold green]当前 mcs 固定出口[/bold green]: [bold]{active}[/bold]")
+            ban.update(f"当前出口: [bold]{active}[/bold]")
         else:
-            ban.update(
-                "[bold yellow]当前 mcs 路由[/bold yellow]: [bold]多节点随机 balancer[/bold] "
-                "（未固定单一出口；可在下方 Enter 选用一行固定）"
-            )
+            ban.update("当前路由: [bold]多节点随机[/bold]（未固定）")
 
     def _sync_mark_column(self) -> None:
         """按 ``mcs/configs/v2ray.json`` 里实际路由刷新「在用标记」列。"""
@@ -155,7 +133,7 @@ class V2rayPickerApp(App[None]):
             self.notify("正在测速，请稍候", severity="warning")
             return
         self._testing = True
-        self._set_status("全部测速中（每个节点会临时起 v2ray 子进程）…")
+        self._set_status("全部测速中…")
         self._run_test_all()
 
     @work(thread=True, exclusive=True)
@@ -190,7 +168,7 @@ class V2rayPickerApp(App[None]):
 
     def _test_done(self) -> None:
         self._testing = False
-        self._set_status("测速结束：↑↓ 选行后 Enter 立即固定并热重载；[t] 再测。")
+        self._set_status("测速完成")
 
     def action_test_row(self) -> None:
         if self._testing:
@@ -201,7 +179,7 @@ class V2rayPickerApp(App[None]):
             self.notify("请先选中一行", severity="warning")
             return
         self._testing = True
-        self._set_status(f"测速中: 第 {row + 1} 行 …")
+        self._set_status("测速中…")
         self._run_test_row(row)
 
     @work(thread=True, exclusive=True)
@@ -225,7 +203,7 @@ class V2rayPickerApp(App[None]):
 
     def _row_test_done(self) -> None:
         self._testing = False
-        self._set_status("就绪。")
+        self._set_status("")
 
     def action_activate(self) -> None:
         if self._testing:
