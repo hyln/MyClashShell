@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""install/download.yaml：解析 URL + 将安装所需二进制下载到 cache/download/。
+"""安装阶段依赖准备：pip + 使用预置或在线补齐 cache/download/。
 
 子命令:
-  install-cache   创建 cache/download/、安装 pip 依赖、下载 mihomo → cache/download/clash.gz、Country.mmdb、
-                  geoip.dat / geosite.dat（install/download.yaml 中 ``geoip`` / ``geosite``）、
-                  可选下载并解压 xray 到 cache/download/xray（供 install.sh 再 cp 到 mcs/bin/）
-  url SECTION [ARCH]  仅打印一条 URL（SECTION 为 mmdb / geoip / geosite 时不带 ARCH；clash/mihomo/mihoyo 均指向 mihomo 段）
+  install-cache   安装 pip 依赖；离线安装包直接使用 cache/download/；
+                  开发仓库缺文件时从 download.yaml 在线下载
+  url SECTION [ARCH]  打印 download.yaml 中的 URL（供 build_release 使用）
 
 环境变量 MYCLASH_ROOT_PWD 须指向仓库根。
 """
@@ -14,39 +13,26 @@ from __future__ import annotations
 
 import argparse
 import os
-import platform
-import shutil
 import stat
-import subprocess
 import sys
-import tempfile
-import zipfile
 from pathlib import Path
-from urllib.error import URLError
-from urllib.request import urlretrieve
-
-import yaml
 
 _repo_root = Path(__file__).resolve().parents[1]
 if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
+from install.release import (  # noqa: E402
+    ensure_cache_download,
+    geo_asset_url,
+    install_pip_deps,
+    load_download_doc,
+    machine_to_arch,
+    url_from_doc,
+)
 from scripts.lib.paths import (  # noqa: E402
     cache_download_dir,
     migrate_legacy_cache_layout,
     repo_cache_dir,
 )
-
-_XRAY_BIN_NAMES = ("xray",)
-
-# download.yaml 中内核段键名；url 子命令中 clash / mihoyo 视为别名（配置侧仍用 backend: clash）
-_YAML_KERNEL_SECTION = "mihomo"
-
-
-def _yaml_section_for_url(section: str) -> str:
-    s = section.strip().lower()
-    if s in ("clash", "mihomo", "mihoyo"):
-        return _YAML_KERNEL_SECTION
-    return s
 
 
 def _root() -> Path:
@@ -55,63 +41,6 @@ def _root() -> Path:
         print("resolve_download: 缺少 MYCLASH_ROOT_PWD", file=sys.stderr)
         sys.exit(2)
     return Path(raw).resolve()
-
-
-def _load_doc(root: Path) -> dict:
-    doc_path = root / "install" / "download.yaml"
-    if not doc_path.is_file():
-        print(f"resolve_download: 未找到 {doc_path}", file=sys.stderr)
-        sys.exit(2)
-    with doc_path.open(encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    if not isinstance(data, dict):
-        print("resolve_download: download.yaml 格式错误", file=sys.stderr)
-        sys.exit(2)
-    return data
-
-
-def _url_from_doc(data: dict, section: str, arch: str | None) -> str:
-    if section == "mmdb":
-        url = data.get("mmdb")
-        if not isinstance(url, str) or not url.strip():
-            raise ValueError("缺少 mmdb URL")
-        return url.strip()
-    if not arch:
-        raise ValueError("clash/mihomo/xray 须指定 arch")
-    section = _yaml_section_for_url(section)
-    block = data.get(section)
-    if not isinstance(block, dict):
-        raise ValueError(f"缺少 {section} 段")
-    u = block.get(arch)
-    if not isinstance(u, str) or not u.strip():
-        raise ValueError(f"{section}.{arch} 无有效 URL")
-    return u.strip()
-
-
-def _geo_asset_url(data: dict, key: str) -> str | None:
-    raw = data.get(key)
-    if isinstance(raw, str) and raw.strip():
-        return raw.strip()
-    return None
-
-
-def _optional_xray_url(data: dict, arch: str) -> str | None:
-    try:
-        return _url_from_doc(data, "xray", arch)
-    except ValueError:
-        return None
-
-
-def _machine_to_dl_arch() -> str:
-    m = platform.machine().lower()
-    if m in ("x86_64", "amd64"):
-        return "amd64"
-    if m in ("aarch64", "arm64"):
-        return "arm64"
-    if m in ("armv7l", "armv7", "armhf", "armv7a"):
-        return "armv7"
-    print(f"resolve_download: 不支持的架构 {m!r}", file=sys.stderr)
-    sys.exit(2)
 
 
 def _chmod_tree_rw(path: Path) -> None:
@@ -126,80 +55,6 @@ def _chmod_tree_rw(path: Path) -> None:
         pass
 
 
-def _format_bytes(n: int) -> str:
-    size = float(max(n, 0))
-    for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024 or unit == "GB":
-            if unit == "B":
-                return f"{int(size)} {unit}"
-            return f"{size:.1f} {unit}"
-        size /= 1024
-    return f"{size:.1f} GB"
-
-
-def _progress_hook(label: str):
-    state = {"shown": False}
-
-    def hook(block_count: int, block_size: int, total_size: int) -> None:
-        downloaded = block_count * block_size
-        state["shown"] = True
-        if total_size and total_size > 0:
-            downloaded = min(downloaded, total_size)
-            ratio = downloaded / total_size
-            bar_width = 28
-            filled = min(bar_width, int(ratio * bar_width))
-            bar = "#" * filled + "-" * (bar_width - filled)
-            msg = (
-                f"\rresolve_download: {label} [{bar}] "
-                f"{ratio * 100:5.1f}% {_format_bytes(downloaded)}/{_format_bytes(total_size)}"
-            )
-        else:
-            msg = f"\rresolve_download: {label} 已下载 {_format_bytes(downloaded)}"
-        sys.stdout.write(msg)
-        sys.stdout.flush()
-
-    return hook, state
-
-
-def _download_file(url: str, dest: Path, label: str) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    print(f"resolve_download: 下载 {label} -> {dest}")
-    hook, state = _progress_hook(label)
-    try:
-        urlretrieve(url, str(dest), reporthook=hook)
-    except (OSError, URLError) as exc:
-        if state["shown"]:
-            print()
-        print(f"resolve_download: 下载失败 {label}: {exc}", file=sys.stderr)
-        sys.exit(1)
-    if state["shown"]:
-        print()
-
-
-def _download_file_optional(url: str, dest: Path, label: str) -> bool:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    print(f"resolve_download: 下载 {label} -> {dest}")
-    hook, state = _progress_hook(label)
-    try:
-        urlretrieve(url, str(dest), reporthook=hook)
-    except (OSError, URLError) as exc:
-        if state["shown"]:
-            print()
-        print(f"resolve_download: {label} 下载失败，跳过: {exc}", file=sys.stderr)
-        return False
-    if state["shown"]:
-        print()
-    return True
-
-
-def _find_xray_binary(unzip_dir: Path) -> Path | None:
-    for name in _XRAY_BIN_NAMES:
-        for p in unzip_dir.rglob(name):
-            if p.is_file():
-                return p
-    return None
-
-
 def cmd_install_cache() -> None:
     root = _root()
     migrate_legacy_cache_layout(root)
@@ -210,135 +65,56 @@ def cmd_install_cache() -> None:
     _chmod_tree_rw(repo_cache)
     _chmod_tree_rw(dload)
 
-    venv_py = root / "venv" / "bin" / "python3"
-    if not venv_py.is_file():
-        print("resolve_download: 未找到 venv/bin/python3，请先 mkvenv", file=sys.stderr)
+    try:
+        install_pip_deps(root)
+    except (FileNotFoundError, RuntimeError) as exc:
+        print(f"resolve_download: {exc}", file=sys.stderr)
         sys.exit(2)
-    print("resolve_download: 安装 pip 依赖 (pyyaml ruamel.yaml colorlog requests textual flask) …")
-    r = subprocess.run(
-        [
-            str(venv_py),
-            "-m",
-            "pip",
-            "install",
-            "pyyaml",
-            "ruamel.yaml",
-            "colorlog",
-            "requests",
-            "textual",
-            "flask",
-        ],
-        cwd=str(root),
-    )
-    if r.returncode != 0:
-        print("resolve_download: pip 安装失败", file=sys.stderr)
-        sys.exit(r.returncode)
 
-    data = _load_doc(root)
-    arch = _machine_to_dl_arch()
-    print(f"resolve_download: 使用 install/download.yaml 架构={arch}")
-
-    clash_gz = dload / "clash.gz"
-    if clash_gz.is_file():
-        print("resolve_download: cache/download/clash.gz 已存在，跳过")
-    else:
-        _download_file(_url_from_doc(data, _YAML_KERNEL_SECTION, arch), clash_gz, "mihomo→clash.gz")
-
-    mmdb = dload / "Country.mmdb"
-    if mmdb.is_file():
-        print("resolve_download: cache/download/Country.mmdb 已存在，跳过")
-    else:
-        _download_file(_url_from_doc(data, "mmdb", None), mmdb, "Country.mmdb")
-
-    geoip_path = dload / "geoip.dat"
-    if geoip_path.is_file():
-        print("resolve_download: cache/download/geoip.dat 已存在，跳过")
-    else:
-        gu = _geo_asset_url(data, "geoip")
-        if gu:
-            _download_file(gu, geoip_path, "geoip.dat")
-        else:
-            print(
-                "resolve_download: download.yaml 未配置 geoip，跳过 geoip.dat",
-                file=sys.stderr,
-            )
-
-    geosite_path = dload / "geosite.dat"
-    if geosite_path.is_file():
-        print("resolve_download: cache/download/geosite.dat 已存在，跳过")
-    else:
-        gs = _geo_asset_url(data, "geosite")
-        if gs:
-            _download_file(gs, geosite_path, "geosite.dat")
-        else:
-            print(
-                "resolve_download: download.yaml 未配置 geosite，跳过 geosite.dat",
-                file=sys.stderr,
-            )
-
-    xray_url = _optional_xray_url(data, arch)
-    if not xray_url:
-        print("resolve_download: 无 xray URL，跳过 xray 二进制", file=sys.stderr)
-        return
-
-    zip_path = dload / "xray.zip"
-    xray_bin = dload / "xray"
-    if zip_path.is_file():
-        print("resolve_download: cache/download/xray.zip 已存在，跳过下载")
-    elif not _download_file_optional(xray_url, zip_path, "xray zip"):
-        return
-
-    with tempfile.TemporaryDirectory(prefix="xray_uz_", dir=str(dload)) as udz:
-        uz_path = Path(udz)
-        try:
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                zf.extractall(uz_path)
-        except zipfile.BadZipFile as exc:
-            print(f"resolve_download: xray zip 损坏，跳过: {exc}", file=sys.stderr)
-            return
-        found = _find_xray_binary(uz_path)
-        if found is None:
-            print("resolve_download: zip 中未找到 xray，跳过", file=sys.stderr)
-            return
-        shutil.copy2(found, xray_bin)
-    xray_bin.chmod(xray_bin.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    print(f"resolve_download: 已写入 {xray_bin}")
+    arch = machine_to_arch()
+    print(f"resolve_download: 本机架构={arch}")
+    try:
+        ensure_cache_download(root, dload)
+    except (FileNotFoundError, RuntimeError) as exc:
+        print(f"resolve_download: {exc}", file=sys.stderr)
+        sys.exit(1)
+    print("resolve_download: cache/download/ 已就绪")
 
 
 def cmd_url(section: str, arch: str | None) -> None:
     try:
-        data = _load_doc(_root())
+        data = load_download_doc(_root())
         if section == "mmdb":
-            print(_url_from_doc(data, "mmdb", None))
+            print(url_from_doc(data, "mmdb", None))
             return
         if section == "geoip":
-            gu = _geo_asset_url(data, "geoip")
+            gu = geo_asset_url(data, "geoip")
             if not gu:
                 raise ValueError("缺少 geoip URL")
             print(gu)
             return
         if section == "geosite":
-            gs = _geo_asset_url(data, "geosite")
+            gs = geo_asset_url(data, "geosite")
             if not gs:
                 raise ValueError("缺少 geosite URL")
             print(gs)
             return
-        print(_url_from_doc(data, section, arch))
-    except ValueError as exc:
+        print(url_from_doc(data, section, arch))
+    except (ValueError, FileNotFoundError) as exc:
         print(f"resolve_download: {exc}", file=sys.stderr)
         sys.exit(2)
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="install/download.yaml 解析与 cache 下载")
+    ap = argparse.ArgumentParser(description="安装依赖准备与 download.yaml URL 查询")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser(
         "install-cache",
-        help="下载 mihomo（cache/download/clash.gz）/ mmdb / geoip.dat / geosite.dat / xray 到 cache/download/",
+        help="pip 依赖 + 使用 cache/download/（离线包预置或开发模式在线下载）",
     )
 
-    p_url = sub.add_parser("url", help="打印单条 URL")
+    p_url = sub.add_parser("url", help="打印单条 URL（构建安装包用）")
     p_url.add_argument(
         "section",
         choices=("clash", "mihomo", "mihoyo", "xray", "mmdb", "geoip", "geosite"),

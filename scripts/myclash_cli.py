@@ -501,7 +501,7 @@ def _cmd_config(root: Path, args: list[str]) -> int:
             print("用法: myclash config edit", file=sys.stderr)
             return 2
         env = {**os.environ, "MYCLASH_ROOT_PWD": str(root)}
-        return _run([str(_python(root)), "-m", "scripts.tui.app_text"], env=env)
+        return _run([str(_python(root)), "-m", "scripts.tui.yaml_editor"], env=env)
 
     if sub == "show":
         if rest:

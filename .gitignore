@@ -7,6 +7,8 @@ sub_configs
 config.yaml
 tmp
 cache
+build
+dist
 *.log
 user_config.yaml
 venv

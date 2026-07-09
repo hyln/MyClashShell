@@ -139,7 +139,7 @@ mkvenv() {
 }
 
 download_clash() {
-	echo "===下载内核 mihomo（install/resolve_download.py install-cache，安装为 mcs/bin/clash）==="
+	echo "===准备依赖（pip + cache/download/；离线安装包已预置）==="
 	"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/install/resolve_download.py" install-cache
 	print_err_and_exit_if_failed "install-cache 失败（见上）"
 }

@@ -1,5 +1,5 @@
-# 安装下载 URL 清单；由 install/resolve_download.py（子命令 install-cache / url）读取与执行下载。
-# 内核为 mihomo（Clash.Meta）；安装脚本仍解压为 mcs/bin/clash，与 user_config 中 backend: clash 一致。
+# 安装下载 URL 清单；由 install/build_release.py 构建离线包、resolve_download.py 查询 URL。
+# 离线安装包内已预置 cache/download/；开发仓库缺依赖时可在线下载。
 mihomo:
   amd64: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/mihomo-linux-amd64-v1.19.24.gz
   armv7: https://gitee.com/wangdaochuan/resource_backup/releases/download/NewCore/mihomo-linux-armv7-v1.19.24.gz

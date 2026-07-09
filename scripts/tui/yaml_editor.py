@@ -1,9 +1,8 @@
-"""Modern Textual YAML editor for MyClashShell."""
+"""Textual 编辑器：``myclash config edit`` 编辑 ``user_config.yaml``。"""
 
 from __future__ import annotations
 
 import asyncio
-import sys
 import tempfile
 from pathlib import Path
 
