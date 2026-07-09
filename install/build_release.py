@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""构建 MyClashShell 完整离线安装包（apt / pip 除外）。
+"""构建 mcs 完整离线安装包（apt / pip 除外）。
 
 目录布局::
 
-    build/amd64/MyClashShell/     # 与仓库相同的完整目录 + 预置 cache/download/
-    build/armv7/MyClashShell/
-    build/arm64/MyClashShell/
-    dist/MCS-amd64-3.0.6.zip   # 最终发布 zip（版本取自 install/version）
-    dist/MCS-armv7-3.0.6.zip
-    dist/MCS-arm64-3.0.6.zip
+    build/amd64/mcs/            # 与仓库相同的完整目录 + 预置 cache/download/
+    build/armv7/mcs/
+    build/arm64/mcs/
+    dist/MCS-amd64-3.0.7.zip    # 解压后顶层目录为 mcs/（版本取自 install/version）
+    dist/MCS-armv7-3.0.7.zip
+    dist/MCS-arm64-3.0.7.zip
 
 用法（维护者，需联网；MYCLASH_ROOT_PWD 指向仓库根）::
 
@@ -39,7 +39,7 @@ def _root() -> Path:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="构建 MyClashShell 完整离线安装 zip（每架构一包）")
+    ap = argparse.ArgumentParser(description="构建 mcs 完整离线安装 zip（每架构一包）")
     ap.add_argument(
         "arch",
         nargs="?",

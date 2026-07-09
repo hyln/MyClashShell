@@ -1,14 +1,14 @@
-"""离线完整安装包构建：按架构复制 MyClashShell 目录树并预置 cache/download/ 依赖。
+"""离线完整安装包构建：按架构复制仓库目录树并预置 cache/download/ 依赖。
 
 构建产出::
   build/_cache/shared/        … 地理库（跨架构复用，已存在则跳过下载）
   build/_cache/{arch}/        … clash.gz、xray、xray.zip（已存在则跳过）
-  build/amd64/MyClashShell/   … 完整目录（与仓库同结构）
-  build/armv7/MyClashShell/
-  build/arm64/MyClashShell/
-  dist/MCS-amd64-3.0.6.zip
-  dist/MCS-armv7-3.0.6.zip
-  dist/MCS-arm64-3.0.6.zip
+  build/amd64/mcs/            … 完整目录（与仓库同结构）
+  build/armv7/mcs/
+  build/arm64/mcs/
+  dist/MCS-amd64-3.0.7.zip    … 解压后顶层目录为 mcs/
+  dist/MCS-armv7-3.0.7.zip
+  dist/MCS-arm64-3.0.7.zip
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from urllib.request import urlretrieve
 import yaml
 
 ARCHES = ("amd64", "armv7", "arm64")
-PACKAGE_NAME = "MyClashShell"
+PACKAGE_NAME = "mcs"
 RELEASE_ZIP_FMT = "MCS-{arch}-{version}.zip"
 OFFLINE_MARKER = "install/offline-release.yaml"
 CACHE_ASSETS = ("clash.gz", "xray", "Country.mmdb", "geoip.dat", "geosite.dat")
@@ -53,7 +53,8 @@ _COPY_SKIP_DIRS = {
     "sub_configs",
     "config_urls",
 }
-_COPY_SKIP_FILES = {
+# 仅跳过仓库根目录下的用户生成文件，不跳过 install/templates/user_config.yaml 等模板
+_ROOT_SKIP_FILES = {
     "user_config.yaml",
     "config.yaml",
     "config_custom.yaml",
@@ -122,7 +123,7 @@ def read_version(root: Path) -> str:
 
 
 def release_version_label(root: Path) -> str:
-    """``install/version`` 去掉前缀 ``v``，用于 zip 文件名（如 ``3.0.6``）。"""
+    """``install/version`` 去掉前缀 ``v``，用于 zip 文件名（如 ``3.0.7``）。"""
     v = read_version(root)
     return v.lstrip("vV") if v else "0"
 
@@ -293,23 +294,31 @@ def copy_assets_to_cache_download(src_arch: Path, src_shared: Path, cache_downlo
             shutil.copy2(p, cache_download / name)
 
 
-def _copy_ignore(src: str, names: list[str]) -> set[str]:
-    ignored: set[str] = set()
-    for name in names:
-        if name in _COPY_SKIP_DIRS or name in _COPY_SKIP_FILES:
-            ignored.add(name)
-            continue
-        if name == "__pycache__" or name.endswith(".log"):
-            ignored.add(name)
-    if Path(src).name == "install" and "bundles" in names:
-        ignored.add("bundles")
-    return ignored
+def _make_copy_ignore(src_root: Path):
+    root = src_root.resolve()
+
+    def _copy_ignore(src: str, names: list[str]) -> set[str]:
+        ignored: set[str] = set()
+        for name in names:
+            if name in _COPY_SKIP_DIRS:
+                ignored.add(name)
+                continue
+            if name in _ROOT_SKIP_FILES and Path(src).resolve() == root:
+                ignored.add(name)
+                continue
+            if name == "__pycache__" or name.endswith(".log"):
+                ignored.add(name)
+        if Path(src).name == "install" and "bundles" in names:
+            ignored.add("bundles")
+        return ignored
+
+    return _copy_ignore
 
 
 def copy_repo_tree(src_root: Path, dest_root: Path) -> None:
     if dest_root.exists():
         shutil.rmtree(dest_root)
-    shutil.copytree(src_root, dest_root, ignore=_copy_ignore, dirs_exist_ok=False)
+    shutil.copytree(src_root, dest_root, ignore=_make_copy_ignore(src_root), dirs_exist_ok=False)
 
 
 def write_offline_marker(package_root: Path, arch: str, version: str) -> None:
