@@ -812,47 +812,44 @@ class ClashTuiApp(App[None]):
 
     def _sync_proxy_chrome(self) -> None:
         visible = self._state.display_nodes()
-        status = "testing…" if self._state.testing else "ready"
         cur = (self._state.current_node or "").strip()
         idx = self._state.selected_idx
         parts: list[str] = []
         if visible and 0 <= idx < len(visible):
             focus_name = visible[idx]
             if focus_name == cur:
-                parts.append(f"光标/生效: {focus_name}")
+                parts.append(f"当前: {focus_name}")
             else:
-                parts.append(f"光标: {focus_name}")
+                parts.append(f"选中: {focus_name}")
                 if cur:
                     parts.append(f"生效: {cur}")
         elif cur:
             parts.append(f"生效: {cur}")
-        parts.append(f"{len(visible)} nodes")
-        parts.append(status)
-        line = "  |  ".join(parts)
+        if visible:
+            parts.append(f"{len(visible)} 节点")
+        if self._state.testing:
+            parts.append("测速中")
+        line = " · ".join(parts)
         self.query_one("#group-line", Static).update(line)
 
     def _sync_main_footer(self) -> None:
         vid = self._current_view()
         err = self._state.last_error
-        base = "Sidebar ↑↓ pages · Enter/Tab enter page · Ctrl+B sidebar · q quit"
         if vid == "view-proxies":
-            extra = (
-                "  |  Proxies: Tab = Group list ↔ Node list · "
-                "[ ] prev/next strategy group · ↑↓ or j/k move · Enter apply · "
-                "r latency test · u reload from API · Esc focus node list"
-                + (f"  |  {err}" if err else "")
-            )
+            line = "[ ] 换组 · ↑↓ 选节点 · Enter 应用 · r 测速 · u 同步"
+            if err:
+                line += f" · {err}"
         elif vid == "view-overview":
-            extra = (
-                f"  |  {_truncate(self._overview_err, 72)}"
+            line = (
+                f"概览 · {_truncate(self._overview_err, 72)}"
                 if self._overview_err
-                else "  |  Overview: live traffic + connection counts"
+                else "概览 · 实时流量与连接数"
             )
         elif vid == "view-config":
-            extra = "  |  Config: Apply patches runtime (PATCH /configs)"
+            line = "配置 · 修改后点 Apply 写入运行时"
         else:
-            extra = ""
-        self.query_one("#status-line", Static).update(base + extra)
+            line = "侧栏 ↑↓ 切换页面 · Ctrl+B 回侧栏 · q 退出"
+        self.query_one("#status-line", Static).update(line)
 
     async def _rebuild_group_list_async(self) -> None:
         lv = self.query_one("#proxy-group-list", ListView)

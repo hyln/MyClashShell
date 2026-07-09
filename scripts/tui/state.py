@@ -36,8 +36,8 @@ class TuiState:
             return 0
         if self._preferred_group and self._preferred_group in self.groups:
             return self.groups.index(self._preferred_group)
-        if "GLOBAL" in self.groups:
-            return self.groups.index("GLOBAL")
+        if "A-Via-Proxy" in self.groups:
+            return self.groups.index("A-Via-Proxy")
         return 0
 
     def display_nodes(self) -> list[str]:
