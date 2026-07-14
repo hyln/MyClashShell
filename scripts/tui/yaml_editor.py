@@ -11,7 +11,7 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Footer, Static, TextArea
+from textual.widgets import Footer, Static, TextArea
 
 from scripts.lib.paths import repo_root_from_env
 
@@ -29,30 +29,35 @@ class YamlEditorApp(App[None]):
         background: $surface;
     }
     #root {
-        height: 100%;
+        height: 1fr;
         layout: vertical;
-        padding: 1;
+        padding: 0 1;
     }
     .header {
-        height: auto;
-        layout: vertical;
-        margin-bottom: 1;
+        height: 1;
+        layout: horizontal;
+        align-vertical: middle;
     }
     #title {
+        width: auto;
         text-style: bold;
         color: $accent;
+        margin-right: 1;
     }
     #file-state {
+        width: auto;
         color: $text-muted;
         text-style: italic;
+        margin-right: 1;
     }
     #path {
+        width: 1fr;
         color: $text-muted;
     }
     #status {
-        height: auto;
+        height: 1;
         color: $text-muted;
-        margin-bottom: 1;
+        padding-left: 1;
     }
     #editor {
         height: 1fr;
@@ -61,22 +66,13 @@ class YamlEditorApp(App[None]):
     #editor:focus {
         border: tall $accent;
     }
-    .toolbar {
-        height: auto;
-        layout: horizontal;
-        margin-top: 1;
-        align-vertical: middle;
-    }
-    .toolbar Button {
-        margin-right: 1;
-    }
     """
 
     BINDINGS = [
-        Binding("ctrl+s", "save_file", "Save", show=False, key_display="ctrl+s"),
-        Binding("ctrl+r", "reset_file", "Reset", show=False, key_display="ctrl+r"),
-        Binding("escape", "quit", "Exit", show=False, key_display="esc"),
-        Binding("ctrl+q", "quit", "Quit", show=False, key_display="ctrl+q"),
+        Binding("ctrl+s", "save_file", "Save", key_display="ctrl+s"),
+        Binding("ctrl+enter", "validate_file", "Validate", key_display="ctrl+enter"),
+        Binding("ctrl+r", "reset_file", "Reset", key_display="ctrl+r"),
+        Binding("escape", "quit", "Exit", key_display="esc", priority=True),
     ]
 
     def __init__(self, yaml_path: Path | None = None):
@@ -89,11 +85,10 @@ class YamlEditorApp(App[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="root"):
-            with Vertical(classes="header"):
+            with Horizontal(classes="header"):
                 yield Static("YAML Editor", id="title")
                 yield Static("clean", id="file-state", markup=False)
                 yield Static(str(self._yaml_path), id="path", markup=False)
-                yield Static("ready", id="status", markup=False)
             yield TextArea(
                 text="",
                 language="yaml",
@@ -103,11 +98,7 @@ class YamlEditorApp(App[None]):
                 soft_wrap=False,
                 compact=False,
             )
-            with Horizontal(classes="toolbar"):
-                yield Button("Reset", id="reset", variant="default")
-                yield Button("Validate", id="validate", variant="default")
-                yield Button("Save", id="save", variant="primary")
-                yield Button("Exit", id="exit", variant="error")
+            yield Static("ready", id="status", markup=False)
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -183,12 +174,10 @@ class YamlEditorApp(App[None]):
         if self._dirty:
             self._set_status("modified")
 
-    @on(Button.Pressed, "#reset")
     async def reset_file(self) -> None:
         await self._load_file()
         self._set_status("reset and local changes discarded")
 
-    @on(Button.Pressed, "#validate")
     async def validate_file(self) -> None:
         try:
             self._last_valid = yaml.safe_load(self._editor_text())
@@ -200,7 +189,6 @@ class YamlEditorApp(App[None]):
         else:
             self._set_status("valid yaml")
 
-    @on(Button.Pressed, "#save")
     async def save_file(self) -> None:
         text = self._editor_text()
         if not self._dirty:
@@ -221,15 +209,14 @@ class YamlEditorApp(App[None]):
         self._set_title_state()
         self._set_status(f"saved · {self._yaml_hint()}")
 
-    @on(Button.Pressed, "#exit")
-    async def exit_editor(self) -> None:
-        self.exit()
-
     def action_reset_file(self) -> None:
         self.run_worker(self._load_file(), group="yaml-load", exclusive=True, exit_on_error=False)
 
     def action_save_file(self) -> None:
         self.run_worker(self.save_file(), group="yaml-save", exclusive=True, exit_on_error=False)
+
+    def action_validate_file(self) -> None:
+        self.run_worker(self.validate_file(), group="yaml-validate", exclusive=True, exit_on_error=False)
 
     def _atomic_write_text(self, text: str) -> None:
         self._yaml_path.parent.mkdir(parents=True, exist_ok=True)
