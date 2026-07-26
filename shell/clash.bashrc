@@ -2,10 +2,15 @@
 source ${MYCLASH_ROOT_PWD}/scripts/tools/common_func.sh
 
 # 与 user_config.yaml 中 port / socks-port 一致（缺省 7890 / 7891）
+_myclash_read_config() {
+    "${MYCLASH_ROOT_PWD}/venv/bin/python3" \
+        "${MYCLASH_ROOT_PWD}/scripts/tools/read_config_value.py" "$@" 2>/dev/null
+}
+
 _myclash_http_port() {
     local p=7890
     local _p
-    _p=$(PYTHONPATH="${MYCLASH_ROOT_PWD}" ${MYCLASH_ROOT_PWD}/venv/bin/python3 -m scripts.tools.read_config_value port 2>/dev/null)
+    _p=$(_myclash_read_config port)
     if [[ "$_p" =~ ^[0-9]+$ ]]; then
         p="$_p"
     fi
@@ -15,7 +20,7 @@ _myclash_http_port() {
 _myclash_socks_port() {
     local p=7891
     local _p
-    _p=$(PYTHONPATH="${MYCLASH_ROOT_PWD}" ${MYCLASH_ROOT_PWD}/venv/bin/python3 -m scripts.tools.read_config_value socks-port 2>/dev/null)
+    _p=$(_myclash_read_config socks-port)
     if [[ "$_p" =~ ^[0-9]+$ ]]; then
         p="$_p"
     fi
@@ -212,7 +217,7 @@ docker_with_proxy()
 }
 
 # Auto start Proxy in Terminal
-shell_proxy_default=$(PYTHONPATH="${MYCLASH_ROOT_PWD}" ${MYCLASH_ROOT_PWD}/venv/bin/python3 -m scripts.tools.read_config_value shell_proxy_default)
+shell_proxy_default=$(_myclash_read_config shell_proxy_default)
 if [ "${shell_proxy_default}" = "ON" ]; then
     _hp="$(_myclash_http_port)"
     export http_proxy=http://127.0.0.1:${_hp}

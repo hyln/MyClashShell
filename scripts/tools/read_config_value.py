@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
 """Read a handful of `user_config.yaml` values for shell/runtime helpers.
 
-This is intentionally not exposed as a public myclash subcommand.
+Invoke by file path (not as a Python package)::
+
+    ${MYCLASH_ROOT_PWD}/venv/bin/python3 \\
+        ${MYCLASH_ROOT_PWD}/scripts/tools/read_config_value.py port
 """
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 import yaml
 
-from scripts.lib.paths import repo_root_from_env
-
 
 def _root() -> Path:
-    root = repo_root_from_env()
-    if root is not None:
-        return root
+    raw = os.environ.get("MYCLASH_ROOT_PWD", "").strip()
+    if raw:
+        return Path(raw).resolve()
     return Path(__file__).resolve().parents[2]
 
 

@@ -24,7 +24,7 @@ fi
 _http_port() {
 	local p=7890
 	local _p
-	_p=$(PYTHONPATH="${MYCLASH_ROOT_PWD}" "$PY" -m scripts.tools.read_config_value port 2>/dev/null || true)
+	_p=$("$PY" "${MYCLASH_ROOT_PWD}/scripts/tools/read_config_value.py" port 2>/dev/null || true)
 	if [[ "$_p" =~ ^[0-9]+$ ]]; then
 		p="$_p"
 	fi
