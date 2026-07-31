@@ -55,9 +55,21 @@ def main(argv: list[str] | None = None) -> int:
     if key == "socks-port":
         print(_port(doc.get("socks-port"), 7891))
         return 0
-    if key == "shell_proxy_default":
-        v = str(doc.get("shell_proxy_default") or "OFF").strip().upper()
-        print(v if v in ("ON", "OFF") else "OFF")
+    if key == "shell_use_proxy":
+        raw = doc.get("shell_use_proxy")
+        if isinstance(raw, bool):
+            print("true" if raw else "false")
+            return 0
+        v = str(raw or "").strip().lower()
+        print("true" if v in ("1", "true", "yes", "on") else "false")
+        return 0
+    if key == "update_sub_use_proxy":
+        raw = doc.get("update_sub_use_proxy")
+        if isinstance(raw, bool):
+            print("true" if raw else "false")
+            return 0
+        v = str(raw or "").strip().lower()
+        print("true" if v in ("1", "true", "yes", "on") else "false")
         return 0
     print(f"unknown key: {key}", file=sys.stderr)
     return 2

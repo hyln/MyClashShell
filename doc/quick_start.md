@@ -74,14 +74,14 @@ myclash service run
 ### 设置订阅
 修改 MyClashShell 目录下生成的 user_config.yaml
 ```yaml
-shell_proxy_default: 'ON'  #  ON / OFF
+shell_use_proxy: true
 subscribes:
   <your_proxy_name>:
     url: "<you_proxy_url>"
     backend: clash   # clash：订阅合并 / TUI / 9090 API；v2ray：见下文
 default_subscribe: "DEFAULT"
 ```
- - shell_proxy_default: 选择是否自动在命令行开启代理，保存即生效
+ - shell_use_proxy: 新开终端时是否默认开启代理，保存即生效
  - 每条订阅须为 **`url` + `backend`**（`clash` 或 `v2ray`）
  - `<your_proxy_name>` 与 `<you_proxy_url>` 分别为订阅显示名与订阅链接；修改后运行
     ```bash
@@ -98,7 +98,7 @@ default_subscribe: "DEFAULT"
 
 针对有多个代理的情况,MyClashShell允许同时添加多个代理
 ```yaml
-shell_proxy_default: 'ON'  ##  ON  / OFF
+shell_use_proxy: true
 subscribes:
   <your_proxy_name_1>:
     url: "<you_proxy_url_1>"

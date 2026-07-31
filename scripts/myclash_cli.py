@@ -182,8 +182,13 @@ def print_status() -> int:
     return 0
 
 
-def _run(cmd: list[str], *, env: dict[str, str] | None = None) -> int:
-    proc = subprocess.run(cmd, env=env)
+def _run(
+    cmd: list[str],
+    *,
+    env: dict[str, str] | None = None,
+    cwd: str | Path | None = None,
+) -> int:
+    proc = subprocess.run(cmd, env=env, cwd=str(cwd) if cwd is not None else None)
     return proc.returncode
 
 
@@ -365,12 +370,20 @@ def _journalctl_user(*args: str) -> int:
 
 
 def _shell_script(root: Path, rel: str, *args: str) -> int:
-    return _run(["bash", str(root / rel), *args], env={**os.environ, "MYCLASH_ROOT_PWD": str(root)})
+    return _run(
+        ["bash", str(root / rel), *args],
+        env={**os.environ, "MYCLASH_ROOT_PWD": str(root)},
+        cwd=root,
+    )
 
 
 def _python_script(root: Path, rel: str, *args: str) -> int:
     py = _python(root)
-    return _run([str(py), str(root / rel), *args], env={**os.environ, "MYCLASH_ROOT_PWD": str(root)})
+    return _run(
+        [str(py), str(root / rel), *args],
+        env={**os.environ, "MYCLASH_ROOT_PWD": str(root)},
+        cwd=root,
+    )
 
 
 def _cmd_service(root: Path, args: list[str]) -> int:
@@ -500,8 +513,7 @@ def _cmd_config(root: Path, args: list[str]) -> int:
         if rest:
             print("用法: myclash config edit", file=sys.stderr)
             return 2
-        env = {**os.environ, "MYCLASH_ROOT_PWD": str(root)}
-        return _run([str(_python(root)), "-m", "scripts.tui.yaml_editor"], env=env)
+        return _python_script(root, "scripts/tui/yaml_editor.py")
 
     if sub == "show":
         if rest:
@@ -532,7 +544,7 @@ def _cmd_help() -> int:
               log [参数…]       跟踪 myclash.service 或 direct 模式日志（mcs + 内核）
 
             代理
-              shell on|off         当前 shell（默认见 user_config.shell_proxy_default）
+              shell on|off         当前 shell（默认见 user_config.shell_use_proxy）
               window on|off        GNOME 等：系统 HTTP/SOCKS
 
             其它
@@ -542,7 +554,8 @@ def _cmd_help() -> int:
               config <子命令>      edit | show
 
             提示
-              · update_subscribe / change_subscribe：会先 shell off，避免经代理拉配置失败；结束后再 shell on
+              · update_subscribe：默认直连下载（user_config.update_sub_use_proxy: false）；为 true 时经代理
+              · change_subscribe：会先 shell off，避免经代理拉配置失败；结束后再 shell on
               · reload_kernel：只重启 clash/v2ray 子进程
               · run：前台运行 mcs_manager，适合 Docker/K8s entrypoint
               · API 端口见 cache/current_mcs_port.txt；池见 user_config.mcs_api_port_range

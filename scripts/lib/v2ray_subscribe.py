@@ -72,11 +72,20 @@ def _safe_b64decode(s: str) -> bytes:
     return base64.b64decode(_b64pad(t), validate=False)
 
 
-def _curl_download(url: str, dest: Path, timeout_sec: int = 40) -> tuple[bool, str]:
+def _curl_download(
+    url: str,
+    dest: Path,
+    timeout_sec: int = 40,
+    *,
+    use_proxy: bool = False,
+) -> tuple[bool, str]:
     """Returns ``(success, stderr_or_diagnostic)`` for logging on failure."""
     dest.parent.mkdir(parents=True, exist_ok=True)
+    unset = "" if use_proxy else (
+        "unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy; "
+    )
     cmd = (
-        "unset http_proxy https_proxy https_proxy http_proxy ALL_PROXY all_proxy; "
+        f"{unset}"
         f'curl -fsSL --max-time {timeout_sec} -H "User-Agent: v2rayN/6.0" '
         f'-o "{dest}" "{url}"'
     )
@@ -648,6 +657,7 @@ def download_v2ray_subscription_outbounds(
     url: str,
     logger: logging.Logger,
     debug: bool = False,
+    use_proxy: bool = False,
 ) -> list[dict[str, Any]] | None:
     """Download and parse subscription; returns outbounds or ``None`` on failure."""
     url = (url or "").strip()
@@ -663,7 +673,7 @@ def download_v2ray_subscription_outbounds(
     os.close(fd)
     tmp_path = Path(tmp_name)
     try:
-        ok, curl_diag = _curl_download(url, tmp_path)
+        ok, curl_diag = _curl_download(url, tmp_path, use_proxy=use_proxy)
         if not ok:
             logger.error("v2ray 订阅 %s 下载失败", profile_name)
             if curl_diag:

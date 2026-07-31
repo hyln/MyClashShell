@@ -1,10 +1,18 @@
 #!/bin/bash
 source ${MYCLASH_ROOT_PWD}/scripts/tools/common_func.sh
 
+# 固定在仓库根执行 Python，避免其他工程 cwd 下的 scripts/ 抢先导入
+_myclash_python() {
+    local _py="${MYCLASH_ROOT_PWD}/venv/bin/python3"
+    (
+        cd "${MYCLASH_ROOT_PWD}" || exit 1
+        PYTHONPATH="${MYCLASH_ROOT_PWD}" "$_py" "$@"
+    )
+}
+
 # 与 user_config.yaml 中 port / socks-port 一致（缺省 7890 / 7891）
 _myclash_read_config() {
-    "${MYCLASH_ROOT_PWD}/venv/bin/python3" \
-        "${MYCLASH_ROOT_PWD}/scripts/tools/read_config_value.py" "$@" 2>/dev/null
+    _myclash_python scripts/tools/read_config_value.py "$@" 2>/dev/null
 }
 
 _myclash_http_port() {
@@ -42,8 +50,7 @@ _myclash_lan_host() {
 }
 
 _myclash_run_cli() {
-    PYTHONPATH="${MYCLASH_ROOT_PWD}" \
-        "${MYCLASH_ROOT_PWD}/venv/bin/python3" -m scripts.myclash_cli "$@"
+    _myclash_python scripts/myclash_cli.py "$@"
 }
 
 _myclash_with_shell_off() {
@@ -59,7 +66,12 @@ myclash()
     case $1 in
     'service')
         if [ "$2" = "update_subscribe" ]; then
-            _myclash_with_shell_off "$@"
+            _use=$(_myclash_read_config update_sub_use_proxy)
+            if [ "$_use" = "true" ]; then
+                _myclash_run_cli "$@"
+            else
+                _myclash_with_shell_off "$@"
+            fi
             return "$?"
         fi
         _myclash_run_cli "$@"
@@ -128,17 +140,14 @@ myclash()
         ;;
     'ui')
         # 按 default_subscribe 的 backend（优先 mcs GET /kernel/status）自动打开 Clash TUI 或 v2ray TUI
-        _be=$(PYTHONPATH="${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}/venv/bin/python3" \
-            "${MYCLASH_ROOT_PWD}/scripts/tools/myclash_ui_backend.py" 2>/dev/null | tr -d '\r\n')
+        _be=$(_myclash_python scripts/tools/myclash_ui_backend.py 2>/dev/null | tr -d '\r\n')
         _be="${_be:-clash}"
         case "${_be}" in
         v2ray)
-            PYTHONPATH="${MYCLASH_ROOT_PWD}" \
-                "${MYCLASH_ROOT_PWD}/venv/bin/python3" -m scripts.tui_v2ray
+            _myclash_python -m scripts.tui_v2ray
             ;;
         *)
-            PYTHONPATH="${MYCLASH_ROOT_PWD}" \
-                "${MYCLASH_ROOT_PWD}/venv/bin/python3" -m scripts.tui ${2:+$2}
+            _myclash_python -m scripts.tui ${2:+$2}
             ;;
         esac
         ;;
@@ -217,8 +226,7 @@ docker_with_proxy()
 }
 
 # Auto start Proxy in Terminal
-shell_proxy_default=$(_myclash_read_config shell_proxy_default)
-if [ "${shell_proxy_default}" = "ON" ]; then
+if [ "$(_myclash_read_config shell_use_proxy)" = "true" ]; then
     _hp="$(_myclash_http_port)"
     export http_proxy=http://127.0.0.1:${_hp}
     export https_proxy=http://127.0.0.1:${_hp}

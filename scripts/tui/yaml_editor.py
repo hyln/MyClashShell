@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import tempfile
 from pathlib import Path
+
+_repo = Path(__file__).resolve().parents[2]
+if str(_repo) not in sys.path:
+    sys.path.insert(0, str(_repo))
 
 import yaml
 from textual import on

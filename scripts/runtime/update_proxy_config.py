@@ -52,7 +52,7 @@ from scripts.lib.v2ray_subscribe import (  # noqa: E402
 _CLASH_SUBSCRIBE_UA = "clash-verge/2.2.3"
 
 
-def download_profile(profile_name: str, url: str, *, debug: bool = False) -> bool:
+def download_profile(profile_name: str, url: str, *, debug: bool = False, use_proxy: bool = False) -> bool:
     '''
     下载profile
     '''
@@ -62,8 +62,9 @@ def download_profile(profile_name: str, url: str, *, debug: bool = False) -> boo
     logger.info(f'{profile_name} : "{full_url}"')
 
     cache_cfg_path = raw_configs_dir + f"/{profile_name}.yaml"
+    unset = "" if use_proxy else "unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY; "
     download_configs_cmd = (
-        f'unset http_proxy https_proxy;curl -o {cache_cfg_path} -k -L --max-time 20 '
+        f'{unset}curl -o {cache_cfg_path} -k -L --max-time 20 '
         f'-H "User-Agent: {_CLASH_SUBSCRIBE_UA}" "{full_url}"'
     )
     # -k 取消校验
@@ -182,6 +183,7 @@ if __name__=="__main__":
     default_subscribe = None
     rules_template_resolved = None
     slim_pg = False
+    update_sub_use_proxy = False
     subs: dict[str, dict[str, str]] = {}
     with open(user_config_path, "r") as stream:
         dictionary = yaml.safe_load(stream)
@@ -190,6 +192,16 @@ if __name__=="__main__":
             dictionary.get("rules_template") if dictionary else None,
         )
         slim_pg = merge_proxy.slim_proxy_groups_enabled(dictionary)
+        raw_use_proxy = dictionary.get("update_sub_use_proxy") if dictionary else False
+        if isinstance(raw_use_proxy, bool):
+            update_sub_use_proxy = raw_use_proxy
+        else:
+            update_sub_use_proxy = str(raw_use_proxy or "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
         default_subscribe = dictionary.get("default_subscribe")
         sub_dict = dictionary.get("subscribes")
         if sub_dict is None:
@@ -201,6 +213,12 @@ if __name__=="__main__":
             sys.exit(1)
         if not subs:
             raise TypeError("[ERROR] subscribes 为空或无效")
+
+    logger.info(
+        "update_sub_use_proxy=%s（%s）",
+        update_sub_use_proxy,
+        "经代理下载" if update_sub_use_proxy else "直连下载",
+    )
 
     effective = resolve_default_subscribe_name(subs, default_subscribe)
     eff_backend = subs.get(effective, {}).get("backend") if effective else ""
@@ -214,7 +232,7 @@ if __name__=="__main__":
             continue
         url = entry.get("url") or ""
         if util.is_valid_url(url):
-            ret = download_profile(key, url, debug=_debug)
+            ret = download_profile(key, url, debug=_debug, use_proxy=update_sub_use_proxy)
             if ret:
                 download_configs.append(key)
         else:
@@ -233,6 +251,7 @@ if __name__=="__main__":
             url=v2_url,
             logger=logger,
             debug=_debug,
+            use_proxy=update_sub_use_proxy,
         )
         if not obs:
             if key == effective and eff_backend == "v2ray":

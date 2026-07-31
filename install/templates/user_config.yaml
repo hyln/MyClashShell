@@ -1,5 +1,8 @@
 version: <|PLACEHOLD_1|>
-shell_proxy_default: 'ON'  ##  ON  / OFF
+# 新开终端时是否默认开启 shell 代理
+shell_use_proxy: true
+# 更新订阅时是否走本地代理（默认 false：直连下载，避免代理未就绪导致拉取失败）
+update_sub_use_proxy: false
 subscribes:
   your_proxy_name:
     url: "<you_proxy_url>"
