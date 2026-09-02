@@ -6,7 +6,7 @@
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 export MYCLASH_ROOT_PWD=$(realpath "${SCRIPT_DIR}/..")
 
-source "${MYCLASH_ROOT_PWD}/scripts/tools/common_func.sh"
+source "${MYCLASH_ROOT_PWD}/mcs_py/tools/common_func.sh"
 source "${MYCLASH_ROOT_PWD}/install/prompt.sh"
 
 mcs_pid1_comm() {
@@ -207,12 +207,12 @@ install_mcs() {
 	fi
 	if [ ! -f "${MYCLASH_ROOT_PWD}/user_config.yaml" ]; then
 		echo "未找到 user_config.yaml，将重新生成。"
-		"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/runtime/gen_placehold_fill_file.py" \
+		"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/mcs_py/runtime/gen_placehold_fill_file.py" \
 			"${MYCLASH_ROOT_PWD}/install/templates/user_config.yaml" \
 			"${MYCLASH_ROOT_PWD}/user_config.yaml" \
 			"${version}"
 		chmod u+rw "${MYCLASH_ROOT_PWD}/user_config.yaml"
-		"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/runtime/init_user_config_ports.py" \
+		"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/mcs_py/runtime/init_user_config_ports.py" \
 			"${MYCLASH_ROOT_PWD}/user_config.yaml"
 	else
 		config_version=""
@@ -222,12 +222,12 @@ install_mcs() {
 		if [ "$version" != "" ] && [ "$version" != "$config_version" ]; then
 			echo "user_config.yaml 版本($config_version)与当前版本($version)不一致，将重新生成。"
 			rm -f "${MYCLASH_ROOT_PWD}/user_config.yaml"
-			"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/runtime/gen_placehold_fill_file.py" \
+			"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/mcs_py/runtime/gen_placehold_fill_file.py" \
 				"${MYCLASH_ROOT_PWD}/install/templates/user_config.yaml" \
 				"${MYCLASH_ROOT_PWD}/user_config.yaml" \
 				"${version}"
 			chmod u+rw "${MYCLASH_ROOT_PWD}/user_config.yaml"
-			"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/runtime/init_user_config_ports.py" \
+			"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/mcs_py/runtime/init_user_config_ports.py" \
 				"${MYCLASH_ROOT_PWD}/user_config.yaml"
 		fi
 	fi
@@ -248,7 +248,7 @@ install_mcs() {
 		systemctl --user stop myclash.service 2>/dev/null || true
 		systemctl --user disable myclash.service 2>/dev/null || true
 
-		"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/runtime/gen_placehold_fill_file.py" \
+		"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/mcs_py/runtime/gen_placehold_fill_file.py" \
 			"${MYCLASH_ROOT_PWD}/install/templates/myclash.service" \
 			"${MYCLASH_ROOT_PWD}/cache/myclash.service.gen" \
 			"${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}"
@@ -263,7 +263,7 @@ install_mcs() {
 		fi
 	else
 		echo "设置 direct 服务模式（pid/log 默认位于 /tmp/myclash-runtime/；可用 MYCLASH_RUNTIME_DIR 覆盖）"
-		"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/myclash_cli.py" service restart
+		"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/mcs_py/myclash_cli.py" service restart
 	fi
 }
 
@@ -274,7 +274,7 @@ install_mcs() {
 
 
 
-cat "${MYCLASH_ROOT_PWD}/scripts/tools/logo.txt"
+cat "${MYCLASH_ROOT_PWD}/mcs_py/tools/logo.txt"
 mcs_print_root_install_notice
 myclashinfo_welcome
 if [ "${MYCLASH_ASSUME_YES:-0}" != "1" ]; then
@@ -289,7 +289,7 @@ install_mcs
 
 echo "设置 shell 环境变量（写入 ~/.bashrc）"
 mkdir -p "${MYCLASH_ROOT_PWD}/cache"
-"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/runtime/gen_placehold_fill_file.py" \
+"${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/mcs_py/runtime/gen_placehold_fill_file.py" \
 	"${MYCLASH_ROOT_PWD}/install/templates/env_prefix.txt" \
 	"${MYCLASH_ROOT_PWD}/cache/env_prefix.txt" \
 	"${MYCLASH_ROOT_PWD}"

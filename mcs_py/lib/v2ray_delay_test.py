@@ -13,8 +13,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from scripts.lib.paths import repo_root_from_env, xray_executable
-from scripts.lib.v2ray_subscribe import _proxy_outbounds_from_saved_v2ray
+from mcs_py.lib.paths import repo_root_from_env, xray_executable
+from mcs_py.lib.v2ray_subscribe import _proxy_outbounds_from_saved_v2ray
 
 
 def _pick_free_port(host: str = "127.0.0.1") -> int:

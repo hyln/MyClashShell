@@ -44,7 +44,7 @@ source ~/.bashrc
 
 ### Docker / K8s（无 systemd）
 
-容器里通常没有 systemd，可使用 direct 模式安装与运行。direct 模式不会注册 `systemd --user`，而是由 `myclash service start|stop|restart` 直接管理 `scripts/runtime/mcs_manager.py`。PID 与日志默认位于 `/tmp/myclash-runtime/`，可用 `MYCLASH_RUNTIME_DIR` 覆盖。
+容器里通常没有 systemd，可使用 direct 模式安装与运行。direct 模式不会注册 `systemd --user`，而是由 `myclash service start|stop|restart` 直接管理 `mcs_py/runtime/mcs_manager.py`。PID 与日志默认位于 `/tmp/myclash-runtime/`，可用 `MYCLASH_RUNTIME_DIR` 覆盖。
 
 ```bash
 MYCLASH_SERVICE_MODE=direct MYCLASH_ASSUME_YES=1 ./install/install.sh

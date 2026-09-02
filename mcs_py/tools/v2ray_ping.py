@@ -3,8 +3,8 @@
 
 用法（需已安装 curl，且仓库根下有可用的 v2ray/Xray 二进制）::
 
-    PYTHONPATH=<repo> python3 scripts/tools/v2ray_ping.py
-    PYTHONPATH=<repo> python3 scripts/tools/v2ray_ping.py [--tag …] [--url …]
+    PYTHONPATH=<repo> python3 mcs_py/tools/v2ray_ping.py
+    PYTHONPATH=<repo> python3 mcs_py/tools/v2ray_ping.py [--tag …] [--url …]
 
 环境变量（可选）::
 
@@ -22,8 +22,8 @@ _repo = Path(__file__).resolve().parents[2]
 if str(_repo) not in sys.path:
     sys.path.insert(0, str(_repo))
 
-from scripts.lib.paths import repo_root_from_env, xray_executable  # noqa: E402
-from scripts.lib.v2ray_delay_test import (  # noqa: E402
+from mcs_py.lib.paths import repo_root_from_env, xray_executable  # noqa: E402
+from mcs_py.lib.v2ray_delay_test import (  # noqa: E402
     default_v2ray_config_path,
     list_proxy_outbounds_from_file,
     measure_proxy_delay_ms,

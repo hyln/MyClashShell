@@ -35,7 +35,7 @@ from typing import Any
 
 import yaml
 
-from scripts.lib.paths import mcs_configs_dir, subscribe_cache_dir, v2ray_geo_asset_dir
+from mcs_py.lib.paths import mcs_configs_dir, subscribe_cache_dir, v2ray_geo_asset_dir
 
 
 def _load_v2ray_existing_for_merge(

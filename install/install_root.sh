@@ -10,7 +10,7 @@ fi
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 export MYCLASH_ROOT_PWD=$(realpath "${SCRIPT_DIR}/..")
 # shellcheck source=/dev/null
-source "${MYCLASH_ROOT_PWD}/scripts/tools/common_func.sh"
+source "${MYCLASH_ROOT_PWD}/mcs_py/tools/common_func.sh"
 
 mcs_install_apt_packages() {
 	local list_file="${MYCLASH_ROOT_PWD}/install/apt-packages.txt"

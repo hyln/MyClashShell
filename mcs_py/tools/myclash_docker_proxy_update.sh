@@ -26,7 +26,7 @@ _http_port() {
 	local _p
 	_p=$(
 		cd "${MYCLASH_ROOT_PWD}" || exit 1
-		PYTHONPATH="${MYCLASH_ROOT_PWD}" "$PY" scripts/tools/read_config_value.py port 2>/dev/null || true
+		PYTHONPATH="${MYCLASH_ROOT_PWD}" "$PY" mcs_py/tools/read_config_value.py port 2>/dev/null || true
 	)
 	if [[ "$_p" =~ ^[0-9]+$ ]]; then
 		p="$_p"

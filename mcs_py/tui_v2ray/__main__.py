@@ -1,4 +1,4 @@
-"""运行: PYTHONPATH=<repo> python3 -m scripts.tui_v2ray"""
+"""运行: PYTHONPATH=<repo> python3 -m mcs_py.tui_v2ray"""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def main() -> None:
             file=sys.stderr,
         )
         sys.exit(1)
-    from scripts.tui_v2ray.app import V2rayPickerApp
+    from mcs_py.tui_v2ray.app import V2rayPickerApp
 
     V2rayPickerApp(root=root).run()
 

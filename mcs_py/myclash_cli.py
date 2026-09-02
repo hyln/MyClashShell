@@ -24,13 +24,13 @@ _repo = Path(__file__).resolve().parents[1]
 if str(_repo) not in sys.path:
     sys.path.insert(0, str(_repo))
 
-from scripts.lib.mcs_api_client import (  # noqa: E402
+from mcs_py.lib.mcs_api_client import (  # noqa: E402
     get_kernel_status,
     mcs_control_base_url,
     request_kernel_reload,
     request_sync_meta,
 )
-from scripts.lib.paths import current_sub_txt_path, repo_root_from_env  # noqa: E402
+from mcs_py.lib.paths import current_sub_txt_path, repo_root_from_env  # noqa: E402
 
 
 def _root() -> Path:
@@ -241,7 +241,7 @@ def _pid_is_myclash_manager(root: Path, pid: int | None) -> bool:
     except OSError:
         return True
     text = " ".join(part.decode("utf-8", errors="ignore") for part in parts)
-    return "scripts/runtime/mcs_manager.py" in text and str(root) in text
+    return "mcs_py/runtime/mcs_manager.py" in text and str(root) in text
 
 
 def _service_mode(root: Path) -> str:
@@ -277,7 +277,7 @@ def _direct_start(root: Path) -> int:
     log_path = _log_file(root)
     log = log_path.open("ab")
     proc = subprocess.Popen(
-        [str(_python(root)), str(root / "scripts/runtime/mcs_manager.py")],
+        [str(_python(root)), str(root / "mcs_py/runtime/mcs_manager.py")],
         cwd=str(root),
         env=env,
         stdin=subprocess.DEVNULL,
@@ -298,7 +298,7 @@ def _direct_start(root: Path) -> int:
 
 def _direct_run(root: Path) -> int:
     env = {**os.environ, "MYCLASH_ROOT_PWD": str(root)}
-    os.execve(str(_python(root)), [str(_python(root)), str(root / "scripts/runtime/mcs_manager.py")], env)
+    os.execve(str(_python(root)), [str(_python(root)), str(root / "mcs_py/runtime/mcs_manager.py")], env)
     return 1
 
 
@@ -419,7 +419,7 @@ def _cmd_service(root: Path, args: list[str]) -> int:
     if sub == "get_logs":
         return _journalctl_user("-u", "myclash.service", "-n", "200", "-f", *rest)
     if sub == "update_subscribe":
-        return _python_script(root, "scripts/runtime/update_proxy_config.py", *rest)
+        return _python_script(root, "mcs_py/runtime/update_proxy_config.py", *rest)
     if sub == "reload_kernel":
         logging.basicConfig(level=logging.INFO, format="%(message)s")
         ok = request_kernel_reload(logger=logging.getLogger("myclash_cli"), root=root)
@@ -473,12 +473,12 @@ def _cmd_share(root: Path, args: list[str]) -> int:
 
 
 def _cmd_change_subscribe(root: Path, args: list[str]) -> int:
-    return _python_script(root, "scripts/runtime/change_sub.py", *args)
+    return _python_script(root, "mcs_py/runtime/change_sub.py", *args)
 
 
 def _cmd_docker_proxy(root: Path, args: list[str]) -> int:
     if len(args) == 1 and args[0] == "update":
-        return _shell_script(root, "scripts/tools/myclash_docker_proxy_update.sh")
+        return _shell_script(root, "mcs_py/tools/myclash_docker_proxy_update.sh")
     print("用法: myclash docker-proxy update", file=sys.stderr)
     return 2
 
@@ -513,7 +513,7 @@ def _cmd_config(root: Path, args: list[str]) -> int:
         if rest:
             print("用法: myclash config edit", file=sys.stderr)
             return 2
-        return _python_script(root, "scripts/tui/yaml_editor.py")
+        return _python_script(root, "mcs_py/tui/yaml_editor.py")
 
     if sub == "show":
         if rest:

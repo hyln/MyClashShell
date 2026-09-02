@@ -3,8 +3,8 @@
 
 命令行用法（一般不手写；选节点请用 ``myclash ui``）::
 
-    PYTHONPATH=<repo> python3 scripts/tools/v2ray_use.py <outbound-tag>
-    PYTHONPATH=<repo> python3 scripts/tools/v2ray_use.py --clear
+    PYTHONPATH=<repo> python3 mcs_py/tools/v2ray_use.py <outbound-tag>
+    PYTHONPATH=<repo> python3 mcs_py/tools/v2ray_use.py --clear
 """
 
 from __future__ import annotations
@@ -18,8 +18,8 @@ _repo = Path(__file__).resolve().parents[2]
 if str(_repo) not in sys.path:
     sys.path.insert(0, str(_repo))
 
-from scripts.lib.paths import repo_root_from_env  # noqa: E402
-from scripts.lib.v2ray_persist import apply_v2ray_outbound_selection  # noqa: E402
+from mcs_py.lib.paths import repo_root_from_env  # noqa: E402
+from mcs_py.lib.v2ray_persist import apply_v2ray_outbound_selection  # noqa: E402
 
 
 def main() -> int:

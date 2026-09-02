@@ -13,9 +13,9 @@ from textual.binding import Binding
 from textual.coordinate import Coordinate
 from textual.widgets import DataTable, Footer, Static
 
-from scripts.lib.paths import xray_executable
-from scripts.lib.v2ray_delay_test import measure_proxy_delay_ms
-from scripts.lib.v2ray_persist import (
+from mcs_py.lib.paths import xray_executable
+from mcs_py.lib.v2ray_delay_test import measure_proxy_delay_ms
+from mcs_py.lib.v2ray_persist import (
     apply_v2ray_outbound_selection,
     fixed_routing_outbound_tag_from_mcs,
     load_proxy_outbounds_from_cache,

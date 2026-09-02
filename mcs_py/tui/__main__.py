@@ -1,4 +1,4 @@
-"""Run: PYTHONPATH=<repo_root> python -m scripts.tui [optional_proxy_group]"""
+"""Run: PYTHONPATH=<repo_root> python -m mcs_py.tui [optional_proxy_group]"""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ def _require_clash_backend_for_tui() -> None:
     _repo = Path(__file__).resolve().parents[2]
     if str(_repo) not in sys.path:
         sys.path.insert(0, str(_repo))
-    from scripts.lib.mcs_api_client import get_kernel_status, mcs_control_base_url
+    from mcs_py.lib.mcs_api_client import get_kernel_status, mcs_control_base_url
 
     st, mcs_err = get_kernel_status()
     if not st:

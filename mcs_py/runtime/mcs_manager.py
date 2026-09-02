@@ -47,8 +47,8 @@ except ImportError:
     )
     sys.exit(1)
 
-from scripts.lib.mcs_api_client import allocate_mcs_listen_port, write_current_mcs_port_file  # noqa: E402
-from scripts.lib.paths import (  # noqa: E402
+from mcs_py.lib.mcs_api_client import allocate_mcs_listen_port, write_current_mcs_port_file  # noqa: E402
+from mcs_py.lib.paths import (  # noqa: E402
     clash_executable,
     current_sub_txt_path,
     mcs_configs_dir,
@@ -56,7 +56,7 @@ from scripts.lib.paths import (  # noqa: E402
     xray_executable,
     v2ray_geo_asset_dir,
 )
-from scripts.lib.subscribe import parse_subscribes, resolve_default_subscribe_name  # noqa: E402
+from mcs_py.lib.subscribe import parse_subscribes, resolve_default_subscribe_name  # noqa: E402
 
 _backend: BackendManager | None = None
 _httpd: Any = None

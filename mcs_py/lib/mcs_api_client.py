@@ -22,7 +22,7 @@ from pathlib import Path
 
 import yaml
 
-from scripts.lib.paths import repo_cache_dir, repo_root
+from mcs_py.lib.paths import repo_cache_dir, repo_root
 
 # user_config 未写 mcs_api_port_range 时的默认池（含端点）
 DEFAULT_MCS_API_START_PORT = 29190

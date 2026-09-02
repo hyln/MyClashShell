@@ -6,9 +6,9 @@
   build/amd64/mcs/            … 完整目录（与仓库同结构）
   build/armv7/mcs/
   build/arm64/mcs/
-  dist/MCS-amd64-3.0.7.zip    … 解压后顶层目录为 mcs/
-  dist/MCS-armv7-3.0.7.zip
-  dist/MCS-arm64-3.0.7.zip
+  dist/MCS-amd64-3.0.9.zip    … 解压后顶层目录为 mcs/
+  dist/MCS-armv7-3.0.9.zip
+  dist/MCS-arm64-3.0.9.zip
 """
 
 from __future__ import annotations
@@ -123,7 +123,7 @@ def read_version(root: Path) -> str:
 
 
 def release_version_label(root: Path) -> str:
-    """``install/version`` 去掉前缀 ``v``，用于 zip 文件名（如 ``3.0.7``）。"""
+    """``install/version`` 去掉前缀 ``v``，用于 zip 文件名（如 ``3.0.9``）。"""
     v = read_version(root)
     return v.lstrip("vV") if v else "0"
 

@@ -32,7 +32,7 @@ from textual.widgets import (
     Switch,
 )
 
-from scripts.lib.config_runtime import runtime_config_patch_payload
+from mcs_py.lib.config_runtime import runtime_config_patch_payload
 from .client import ClashClient
 from .constants import VIEW_IDS
 from .formatting import (

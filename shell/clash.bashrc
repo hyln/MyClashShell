@@ -1,7 +1,7 @@
 #!/bin/bash
-source ${MYCLASH_ROOT_PWD}/scripts/tools/common_func.sh
+source ${MYCLASH_ROOT_PWD}/mcs_py/tools/common_func.sh
 
-# 固定在仓库根执行 Python，避免其他工程 cwd 下的 scripts/ 抢先导入
+# 固定在仓库根执行 Python，避免其他工程 cwd 下的同名包抢先导入
 _myclash_python() {
     local _py="${MYCLASH_ROOT_PWD}/venv/bin/python3"
     (
@@ -12,7 +12,7 @@ _myclash_python() {
 
 # 与 user_config.yaml 中 port / socks-port 一致（缺省 7890 / 7891）
 _myclash_read_config() {
-    _myclash_python scripts/tools/read_config_value.py "$@" 2>/dev/null
+    _myclash_python mcs_py/tools/read_config_value.py "$@" 2>/dev/null
 }
 
 _myclash_http_port() {
@@ -50,7 +50,7 @@ _myclash_lan_host() {
 }
 
 _myclash_run_cli() {
-    _myclash_python scripts/myclash_cli.py "$@"
+    _myclash_python mcs_py/myclash_cli.py "$@"
 }
 
 _myclash_with_shell_off() {
@@ -140,14 +140,14 @@ myclash()
         ;;
     'ui')
         # 按 default_subscribe 的 backend（优先 mcs GET /kernel/status）自动打开 Clash TUI 或 v2ray TUI
-        _be=$(_myclash_python scripts/tools/myclash_ui_backend.py 2>/dev/null | tr -d '\r\n')
+        _be=$(_myclash_python mcs_py/tools/myclash_ui_backend.py 2>/dev/null | tr -d '\r\n')
         _be="${_be:-clash}"
         case "${_be}" in
         v2ray)
-            _myclash_python -m scripts.tui_v2ray
+            _myclash_python -m mcs_py.tui_v2ray
             ;;
         *)
-            _myclash_python -m scripts.tui ${2:+$2}
+            _myclash_python -m mcs_py.tui ${2:+$2}
             ;;
         esac
         ;;

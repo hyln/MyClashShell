@@ -13,10 +13,10 @@ import merge_proxy
 _repo = Path(__file__).resolve().parents[2]
 if str(_repo) not in sys.path:
     sys.path.insert(0, str(_repo))
-from scripts.lib.subscribe import parse_subscribes, persist_default_subscribe  # noqa: E402
-from scripts.lib.paths import clash_config_yaml, migrate_legacy_cache_layout, subscribe_cache_dir  # noqa: E402
-from scripts.lib.mcs_api_client import request_kernel_reload, request_sync_meta  # noqa: E402
-from scripts.lib.v2ray_subscribe import download_and_write_v2ray_config  # noqa: E402
+from mcs_py.lib.subscribe import parse_subscribes, persist_default_subscribe  # noqa: E402
+from mcs_py.lib.paths import clash_config_yaml, migrate_legacy_cache_layout, subscribe_cache_dir  # noqa: E402
+from mcs_py.lib.mcs_api_client import request_kernel_reload, request_sync_meta  # noqa: E402
+from mcs_py.lib.v2ray_subscribe import download_and_write_v2ray_config  # noqa: E402
 
 
 def _load_user_config(root: Path) -> dict:

@@ -14,9 +14,9 @@ if [ "${EUID:-0}" -eq 0 ] && [ "$SERVICE_MODE" != "direct" ]; then
 	exit 1
 fi
 
-if [ -x "${MYCLASH_ROOT_PWD}/venv/bin/python3" ] && [ -f "${MYCLASH_ROOT_PWD}/scripts/myclash_cli.py" ]; then
+if [ -x "${MYCLASH_ROOT_PWD}/venv/bin/python3" ] && [ -f "${MYCLASH_ROOT_PWD}/mcs_py/myclash_cli.py" ]; then
 	echo "停止 MyClash 服务（若正在运行）"
-	MYCLASH_ROOT_PWD="${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/scripts/myclash_cli.py" service stop 2>/dev/null || true
+	MYCLASH_ROOT_PWD="${MYCLASH_ROOT_PWD}" "${MYCLASH_ROOT_PWD}/venv/bin/python3" "${MYCLASH_ROOT_PWD}/mcs_py/myclash_cli.py" service stop 2>/dev/null || true
 fi
 
 echo "停止/移除用户级 myclash.service"

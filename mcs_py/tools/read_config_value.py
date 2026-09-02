@@ -4,7 +4,7 @@
 Invoke by file path (not as a Python package)::
 
     ${MYCLASH_ROOT_PWD}/venv/bin/python3 \\
-        ${MYCLASH_ROOT_PWD}/scripts/tools/read_config_value.py port
+        ${MYCLASH_ROOT_PWD}/mcs_py/tools/read_config_value.py port
 """
 
 from __future__ import annotations

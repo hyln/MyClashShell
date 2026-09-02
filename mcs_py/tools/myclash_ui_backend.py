@@ -15,7 +15,7 @@ if str(_repo) not in sys.path:
 def _backend_from_user_config(root: Path) -> str:
     import yaml
 
-    from scripts.lib.subscribe import parse_subscribes, resolve_default_subscribe_name
+    from mcs_py.lib.subscribe import parse_subscribes, resolve_default_subscribe_name
 
     uc = root / "user_config.yaml"
     if not uc.is_file():
@@ -48,7 +48,7 @@ def main() -> int:
     root = Path(raw).resolve()
 
     try:
-        from scripts.lib.mcs_api_client import get_kernel_status
+        from mcs_py.lib.mcs_api_client import get_kernel_status
 
         st, _ = get_kernel_status(timeout=3.0, root=root)
         if isinstance(st, dict):

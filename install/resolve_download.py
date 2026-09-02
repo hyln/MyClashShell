@@ -28,7 +28,7 @@ from install.release import (  # noqa: E402
     machine_to_arch,
     url_from_doc,
 )
-from scripts.lib.paths import (  # noqa: E402
+from mcs_py.lib.paths import (  # noqa: E402
     cache_download_dir,
     migrate_legacy_cache_layout,
     repo_cache_dir,

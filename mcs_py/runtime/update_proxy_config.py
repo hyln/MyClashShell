@@ -32,18 +32,18 @@ import colorlog
 _repo = Path(__file__).resolve().parents[2]
 if str(_repo) not in sys.path:
     sys.path.insert(0, str(_repo))
-from scripts.lib.paths import (  # noqa: E402
+from mcs_py.lib.paths import (  # noqa: E402
     clash_config_yaml,
     mcs_configs_dir,
     migrate_legacy_cache_layout,
     subscribe_cache_dir,
 )
-from scripts.lib.subscribe import (  # noqa: E402
+from mcs_py.lib.subscribe import (  # noqa: E402
     parse_subscribes,
     resolve_default_subscribe_name,
 )
-from scripts.lib.mcs_api_client import request_kernel_reload, request_sync_meta  # noqa: E402
-from scripts.lib.v2ray_subscribe import (  # noqa: E402
+from mcs_py.lib.mcs_api_client import request_kernel_reload, request_sync_meta  # noqa: E402
+from mcs_py.lib.v2ray_subscribe import (  # noqa: E402
     download_v2ray_subscription_outbounds,
     refresh_v2ray_json_listen_from_user_config,
     write_v2ray_json_from_outbounds,

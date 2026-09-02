@@ -6,9 +6,9 @@
     build/amd64/mcs/            # 与仓库相同的完整目录 + 预置 cache/download/
     build/armv7/mcs/
     build/arm64/mcs/
-    dist/MCS-amd64-3.0.7.zip    # 解压后顶层目录为 mcs/（版本取自 install/version）
-    dist/MCS-armv7-3.0.7.zip
-    dist/MCS-arm64-3.0.7.zip
+    dist/MCS-amd64-3.0.9.zip    # 解压后顶层目录为 mcs/（版本取自 install/version）
+    dist/MCS-armv7-3.0.9.zip
+    dist/MCS-arm64-3.0.9.zip
 
 用法（维护者，需联网；MYCLASH_ROOT_PWD 指向仓库根）::
 

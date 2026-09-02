@@ -13,9 +13,9 @@ _repo = Path(__file__).resolve().parents[2]
 if str(_repo) not in sys.path:
     sys.path.insert(0, str(_repo))
 
-from scripts.lib.paths import mcs_configs_dir, repo_root_from_env  # noqa: E402
-from scripts.lib.subscribe import parse_subscribes, resolve_default_subscribe_name  # noqa: E402
-from scripts.lib.v2ray_subscribe import _proxy_outbounds_from_saved_v2ray  # noqa: E402
+from mcs_py.lib.paths import mcs_configs_dir, repo_root_from_env  # noqa: E402
+from mcs_py.lib.subscribe import parse_subscribes, resolve_default_subscribe_name  # noqa: E402
+from mcs_py.lib.v2ray_subscribe import _proxy_outbounds_from_saved_v2ray  # noqa: E402
 
 
 def main() -> int:

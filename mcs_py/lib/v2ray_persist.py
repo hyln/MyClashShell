@@ -9,10 +9,10 @@ from typing import Any
 
 import yaml
 
-from scripts.lib.mcs_api_client import request_kernel_reload, wait_kernel_ready
-from scripts.lib.paths import mcs_configs_dir, subscribe_cache_dir
-from scripts.lib.subscribe import parse_subscribes, resolve_default_subscribe_name
-from scripts.lib.v2ray_subscribe import (
+from mcs_py.lib.mcs_api_client import request_kernel_reload, wait_kernel_ready
+from mcs_py.lib.paths import mcs_configs_dir, subscribe_cache_dir
+from mcs_py.lib.subscribe import parse_subscribes, resolve_default_subscribe_name
+from mcs_py.lib.v2ray_subscribe import (
     _proxy_outbounds_from_saved_v2ray,
     write_v2ray_json_from_outbounds,
 )

@@ -13,7 +13,7 @@ def repo_root_from_env() -> Path | None:
 
 
 def repo_root() -> Path:
-    """Prefer MYCLASH_ROOT_PWD; else infer from scripts/lib/paths.py location (dev)."""
+    """Prefer MYCLASH_ROOT_PWD; else infer from mcs_py/lib/paths.py location (dev)."""
     p = repo_root_from_env()
     if p is not None:
         return p
@@ -22,12 +22,12 @@ def repo_root() -> Path:
 
 def scripts_runtime_dir(root: Path | None = None) -> Path:
     base = root if root is not None else repo_root()
-    return base / "scripts" / "runtime"
+    return base / "mcs_py" / "runtime"
 
 
 def scripts_tools_dir(root: Path | None = None) -> Path:
     base = root if root is not None else repo_root()
-    return base / "scripts" / "tools"
+    return base / "mcs_py" / "tools"
 
 
 def update_proxy_config_script(root: Path | None = None) -> Path:

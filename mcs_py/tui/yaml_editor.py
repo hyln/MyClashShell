@@ -18,7 +18,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Footer, Static, TextArea
 
-from scripts.lib.paths import repo_root_from_env
+from mcs_py.lib.paths import repo_root_from_env
 
 try:
     from tree_sitter import Language
